@@ -1,2 +1,5 @@
 # SC4020-Project1
-SC4020 Data Analytics and Mining
+
+## Development
+
+See [docs/dev.md](docs/dev.md) for more details.

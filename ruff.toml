@@ -1,0 +1,20 @@
+[lint]
+select = [
+    # pycodestyle (style errors)
+    "E",
+    # Pyflakes (logical errors)
+    "F",
+    # isort (import sorting)
+    "I",
+    # flake8-bugbear (bug detection)
+    "B",
+    # pyupgrade (syntax modernization)
+    "UP",
+    # flake8-builtins (built-in shadowing)
+    "A",
+    # flake8-comprehensions (comprehension best practices)
+    "C4",
+]
+
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
