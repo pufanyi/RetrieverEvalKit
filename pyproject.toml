@@ -1,7 +1,7 @@
 [project]
-name = "sc4020-project1"
+name = "img_search"
 version = "0.1.0"
-description = "Add your description here"
+description = "Image search engine"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []
