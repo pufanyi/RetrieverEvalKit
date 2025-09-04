@@ -1,5 +1,7 @@
-from PIL import Image
 from pathlib import Path
+
+from PIL import Image
+
 from img_serach.embedding import get_encoder
 
 if __name__ == "__main__":
@@ -10,4 +12,3 @@ if __name__ == "__main__":
     encoder.build()
     embedding = encoder.encode(img)
     print(embedding)
-    
