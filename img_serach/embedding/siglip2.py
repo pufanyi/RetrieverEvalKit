@@ -16,12 +16,26 @@ class Siglip2Encoder(Encoder):
     ):
         self.model_name = model_name
         self.device_map = device_map
+        self._model: AutoModel | None = None
+        self._processor: AutoProcessor | None = None
 
     def build(self):
-        self.model = AutoModel.from_pretrained(
+        self._model = AutoModel.from_pretrained(
             self.model_name, device_map=self.device_map
         ).eval()
-        self.processor = AutoProcessor.from_pretrained(self.model_name)
+        self._processor = AutoProcessor.from_pretrained(self.model_name)
+
+    @property
+    def model(self):
+        if self._model is None:
+            self.build()
+        return self._model
+
+    @property
+    def processor(self):
+        if self._processor is None:
+            self.build()
+        return self._processor
 
     @override
     def batch_encode(self, images: list[Image.Image | str]) -> torch.Tensor:
