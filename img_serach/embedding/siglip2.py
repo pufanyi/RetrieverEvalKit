@@ -1,3 +1,5 @@
+from typing import override
+
 import torch
 from PIL import Image
 from transformers import AutoModel, AutoProcessor
@@ -23,6 +25,7 @@ class Siglip2Encoder(Encoder):
         ).eval()
         self.processor = AutoProcessor.from_pretrained(self.model_name)
 
+    @override
     def batch_encode(self, images: list[Image.Image | str]) -> torch.Tensor:
         images = [load_image(image) for image in images]
         inputs = self.processor(images, return_tensors="pt").to(self.model.device)
