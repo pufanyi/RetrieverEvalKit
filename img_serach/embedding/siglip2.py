@@ -15,8 +15,6 @@ class Siglip2Encoder(Encoder):
         device_map: str = "auto",
     ):
         self.model_name = model_name
-        self.model: AutoModel | None = None
-        self.processor: AutoProcessor | None = None
         self.device_map = device_map
 
     def build(self):
