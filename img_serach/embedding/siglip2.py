@@ -28,7 +28,9 @@ class Siglip2Encoder(Encoder):
     @override
     def batch_encode(self, images: list[Image.Image | str]) -> torch.Tensor:
         images = [load_image(image) for image in images]
-        inputs = self.processor(images, return_tensors="pt").to(self.model.device)
+        inputs = self.processor(images=images, return_tensors="pt").to(
+            self.model.device
+        )
         with torch.no_grad():
-            outputs = self.model(**inputs)
+            outputs = self.model.get_image_features(**inputs)
         return outputs
