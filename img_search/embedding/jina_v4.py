@@ -1,6 +1,5 @@
 import torch
 from PIL import Image
-
 from vllm import LLM
 from vllm.config import PoolerConfig
 from vllm.inputs.data import TextPrompt
@@ -15,14 +14,10 @@ model = LLM(
 
 # Create text prompts
 query = "Overview of climate change impacts on coastal cities"
-query_prompt = TextPrompt(
-    prompt=f"Query: {query}"
-)
+query_prompt = TextPrompt(prompt=f"Query: {query}")
 
 passage = "The impacts of climate change on coastal cities are significant.."
-passage_prompt = TextPrompt(
-    prompt=f"Passage: {passage}"
-)
+passage_prompt = TextPrompt(prompt=f"Passage: {passage}")
 
 # Create image prompt
 image = Image.open("<path_to_image>")
@@ -55,7 +50,7 @@ def get_embeddings(outputs):
         else:
             # Use all tokens for text-only prompts
             embeddings_tensor = output.outputs.data.detach().clone()
-        
+
         # Pool and normalize embeddings
         pooled_output = (
             embeddings_tensor.sum(dim=0, dtype=torch.float32)
@@ -63,5 +58,6 @@ def get_embeddings(outputs):
         )
         embeddings.append(torch.nn.functional.normalize(pooled_output, dim=-1))
     return embeddings
+
 
 embeddings = get_embeddings(outputs)
