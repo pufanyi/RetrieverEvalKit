@@ -1,63 +1,93 @@
+# !pip install transformers>=4.52.0 torch>=2.6.0 peft>=0.15.2 torchvision pillow
+# !pip install
 import torch
-from PIL import Image
-from vllm import LLM
-from vllm.config import PoolerConfig
-from vllm.inputs.data import TextPrompt
+from transformers import AutoModel
 
-# Initialize model
-model = LLM(
-    model="jinaai/jina-embeddings-v4-vllm-retrieval",
-    task="embed",
-    override_pooler_config=PoolerConfig(pooling_type="ALL", normalize=False),
-    dtype="float16",
+# Initialize the model
+model = AutoModel.from_pretrained(
+    "jinaai/jina-embeddings-v4", trust_remote_code=True, torch_dtype=torch.float16
 )
 
-# Create text prompts
-query = "Overview of climate change impacts on coastal cities"
-query_prompt = TextPrompt(prompt=f"Query: {query}")
+model.to("cuda")
 
-passage = "The impacts of climate change on coastal cities are significant.."
-passage_prompt = TextPrompt(prompt=f"Passage: {passage}")
+# ========================
+# 1. Retrieval Task
+# ========================
+# Configure truncate_dim, max_length (for texts), max_pixels (for images), vector_type,
+# batch_size in the encode function if needed
 
-# Create image prompt
-image = Image.open("<path_to_image>")
-image_prompt = TextPrompt(
-    prompt="<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe the image.<|im_end|>\n",
-    multi_modal_data={"image": image},
+# Encode query
+query_embeddings = model.encode_text(
+    texts=["Overview of climate change impacts on coastal cities"],
+    task="retrieval",
+    prompt_name="query",
 )
 
-# Encode all prompts
-prompts = [query_prompt, passage_prompt, image_prompt]
-outputs = model.encode(prompts)
+# Encode passage (text)
+passage_embeddings = model.encode_text(
+    texts=[
+        "Climate change has led to rising sea levels,"
+        "increased frequency of extreme weather events..."
+    ],
+    task="retrieval",
+    prompt_name="passage",
+)
 
+# Encode image/document
+image_embeddings = model.encode_image(
+    images=["https://i.ibb.co/nQNGqL0/beach1.jpg"],
+    task="retrieval",
+)
 
-def get_embeddings(outputs):
-    VISION_START_TOKEN_ID, VISION_END_TOKEN_ID = 151652, 151653
+# ========================
+# 2. Text Matching Task
+# ========================
+texts = [
+    "غروب جميل على الشاطئ",  # Arabic
+    "海滩上美丽的日落",  # Chinese
+    "Un beau coucher de soleil sur la plage",  # French
+    "Ein wunderschöner Sonnenuntergang am Strand",  # German
+    "Ένα όμορφο ηλιοβασίλεμα πάνω από την παραλία",  # Greek
+    "समुद्र तट पर एक खूबसूरत सूर्यास्त",  # Hindi
+    "Un bellissimo tramonto sulla spiaggia",  # Italian
+    "浜辺に沈む美しい夕日",  # Japanese
+    "해변 위로 아름다운 일몰",  # Korean
+]
 
-    embeddings = []
-    for output in outputs:
-        if VISION_START_TOKEN_ID in output.prompt_token_ids:
-            # Gather only vision tokens
-            img_start_pos = torch.where(
-                torch.tensor(output.prompt_token_ids) == VISION_START_TOKEN_ID
-            )[0][0]
-            img_end_pos = torch.where(
-                torch.tensor(output.prompt_token_ids) == VISION_END_TOKEN_ID
-            )[0][0]
-            embeddings_tensor = output.outputs.data.detach().clone()[
-                img_start_pos : img_end_pos + 1
-            ]
-        else:
-            # Use all tokens for text-only prompts
-            embeddings_tensor = output.outputs.data.detach().clone()
+text_embeddings = model.encode_text(texts=texts, task="text-matching")
 
-        # Pool and normalize embeddings
-        pooled_output = (
-            embeddings_tensor.sum(dim=0, dtype=torch.float32)
-            / embeddings_tensor.shape[0]
-        )
-        embeddings.append(torch.nn.functional.normalize(pooled_output, dim=-1))
-    return embeddings
+# ========================
+# 3. Code Understanding Task
+# ========================
 
+# Encode query
+query_embedding = model.encode_text(
+    texts=["Find a function that prints a greeting message to the console"],
+    task="code",
+    prompt_name="query",
+)
 
-embeddings = get_embeddings(outputs)
+# Encode code
+code_embeddings = model.encode_text(
+    texts=["def hello_world():\n    print('Hello, World!')"],
+    task="code",
+    prompt_name="passage",
+)
+
+# ========================
+# 4. Use multivectors
+# ========================
+
+multivector_embeddings = model.encode_text(
+    texts=texts,
+    task="retrieval",
+    prompt_name="query",
+    return_multivector=True,
+)
+
+images = ["https://i.ibb.co/nQNGqL0/beach1.jpg", "https://i.ibb.co/r5w8hG8/beach2.jpg"]
+multivector_image_embeddings = model.encode_image(
+    images=images,
+    task="retrieval",
+    return_multivector=True,
+)
