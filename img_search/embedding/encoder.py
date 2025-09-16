@@ -25,4 +25,6 @@ class Encoder(ABC):
         image: Image.Image | str | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        return self.batch_encode(texts=[text], images=[image], **kwargs)[0]
+        return self.batch_encode(
+            texts=[text] if text else None, images=[image] if image else None, **kwargs
+        )[0]
