@@ -1,93 +1,60 @@
-# !pip install transformers>=4.52.0 torch>=2.6.0 peft>=0.15.2 torchvision pillow
-# !pip install
+from typing import override
+
 import torch
+from PIL import Image
 from transformers import AutoModel
 
-# Initialize the model
-model = AutoModel.from_pretrained(
-    "jinaai/jina-embeddings-v4", trust_remote_code=True, torch_dtype=torch.float16
-)
+from .encoder import Encoder
 
-model.to("cuda")
 
-# ========================
-# 1. Retrieval Task
-# ========================
-# Configure truncate_dim, max_length (for texts), max_pixels (for images), vector_type,
-# batch_size in the encode function if needed
+class JinaV4Encoder(Encoder):
+    def __init__(
+        self,
+        model_name: str = "jinaai/jina-embeddings-v4",
+        device_map: str = "auto",
+        torch_dtype: torch.dtype = torch.float16,
+    ):
+        self.model_name = model_name
+        self.device_map = device_map
+        self.torch_dtype = torch_dtype
+        self._model = None
+        self.tasks = {"retrieval", "text-matching", "code"}
 
-# Encode query
-query_embeddings = model.encode_text(
-    texts=["Overview of climate change impacts on coastal cities"],
-    task="retrieval",
-    prompt_name="query",
-)
+    def build(self):
+        self._model = AutoModel.from_pretrained(
+            self.model_name,
+            device_map=self.device_map,
+            trust_remote_code=True,
+            torch_dtype=self.torch_dtype,
+        ).eval()
 
-# Encode passage (text)
-passage_embeddings = model.encode_text(
-    texts=[
-        "Climate change has led to rising sea levels,"
-        "increased frequency of extreme weather events..."
-    ],
-    task="retrieval",
-    prompt_name="passage",
-)
+    @property
+    def model(self):
+        if self._model is None:
+            self.build()
+        return self._model
 
-# Encode image/document
-image_embeddings = model.encode_image(
-    images=["https://i.ibb.co/nQNGqL0/beach1.jpg"],
-    task="retrieval",
-)
-
-# ========================
-# 2. Text Matching Task
-# ========================
-texts = [
-    "غروب جميل على الشاطئ",  # Arabic
-    "海滩上美丽的日落",  # Chinese
-    "Un beau coucher de soleil sur la plage",  # French
-    "Ein wunderschöner Sonnenuntergang am Strand",  # German
-    "Ένα όμορφο ηλιοβασίλεμα πάνω από την παραλία",  # Greek
-    "समुद्र तट पर एक खूबसूरत सूर्यास्त",  # Hindi
-    "Un bellissimo tramonto sulla spiaggia",  # Italian
-    "浜辺に沈む美しい夕日",  # Japanese
-    "해변 위로 아름다운 일몰",  # Korean
-]
-
-text_embeddings = model.encode_text(texts=texts, task="text-matching")
-
-# ========================
-# 3. Code Understanding Task
-# ========================
-
-# Encode query
-query_embedding = model.encode_text(
-    texts=["Find a function that prints a greeting message to the console"],
-    task="code",
-    prompt_name="query",
-)
-
-# Encode code
-code_embeddings = model.encode_text(
-    texts=["def hello_world():\n    print('Hello, World!')"],
-    task="code",
-    prompt_name="passage",
-)
-
-# ========================
-# 4. Use multivectors
-# ========================
-
-multivector_embeddings = model.encode_text(
-    texts=texts,
-    task="retrieval",
-    prompt_name="query",
-    return_multivector=True,
-)
-
-images = ["https://i.ibb.co/nQNGqL0/beach1.jpg", "https://i.ibb.co/r5w8hG8/beach2.jpg"]
-multivector_image_embeddings = model.encode_image(
-    images=images,
-    task="retrieval",
-    return_multivector=True,
-)
+    @override
+    def batch_encode(
+        self, texts: list[str] | None = None, images: list[Image.Image | str] | None = None, task: str | None = "retrieval", prompt_name: str | None = "query", **kwargs
+    ) -> torch.Tensor:
+        if texts and images:
+            raise ValueError("texts and images cannot be provided at the same time")
+        if task not in self.tasks:
+            raise ValueError(f"Task {task} not found, available tasks: {self.tasks}")
+        if texts:
+            AVAILABLE_PROMPT_NAMES = {"query", "passage", "code"}
+            text_embeddings = self.model.encode_text(
+                texts=texts,
+                task=task,
+                prompt_name=prompt_name,
+            )
+            return text_embeddings
+        elif images:
+            image_embeddings = self.model.encode_image(
+                images=images,
+                task=task,
+            )
+            return image_embeddings
+        else:
+            raise ValueError("Please provide either texts or images")

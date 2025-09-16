@@ -38,7 +38,9 @@ class Siglip2Encoder(Encoder):
         return self._processor
 
     @override
-    def batch_encode(self, images: list[Image.Image | str]) -> torch.Tensor:
+    def batch_encode(
+        self, images: list[Image.Image | str], **kwargs
+    ) -> torch.Tensor:
         images = [load_image(image) for image in images]
         inputs = self.processor(images=images, return_tensors="pt").to(
             self.model.device
