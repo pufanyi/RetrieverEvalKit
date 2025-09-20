@@ -1,0 +1,23 @@
+# This configuration is based on the setup in img_search/utils/logging.py
+# It defines the handlers to be added to the loguru logger.
+handlers:
+  # Handler 1: For INFO level messages, using RichHandler for formatted console output.
+  # A custom loader would be needed to interpret the "sink: rich" and instantiate
+  # the RichHandler with its specific parameters.
+  - sink: "rich"
+    level: "INFO"
+    format: "{message}"
+    enqueue: true
+    backtrace: true
+    diagnose: false
+    # RichHandler specific options:
+    rich_tracebacks: true
+    show_path: false
+    show_time: false
+  # Handler 2: For ERROR level messages, logging to standard error with a detailed format.
+  - sink: "sys.stderr"
+    level: "ERROR"
+    format: "<red>{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}</red>"
+    enqueue: true
+    backtrace: true
+    diagnose: true
