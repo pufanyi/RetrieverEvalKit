@@ -7,6 +7,7 @@ from PIL import Image
 class ImageDataset(ABC):
     def __init__(self, name: str):
         self.name = name
+
     def __len__(self) -> int:
         return self.length()
 

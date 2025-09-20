@@ -1,8 +1,8 @@
 from omegaconf import DictConfig
+
 from .encoder import Encoder
 from .jina_v4 import JinaV4Encoder
 from .siglip2 import Siglip2Encoder
-    
 
 __all__ = ["Siglip2Encoder", "JinaV4Encoder"]
 

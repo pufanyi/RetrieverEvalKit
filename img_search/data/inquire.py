@@ -11,11 +11,11 @@ class InquireDataset(ImageDataset):
         super().__init__("INQUIRE")
         self.dataset_path = path
         self._dataset = None
-        self.split=split
+        self.split = split
 
     def build(self):
         self._dataset = load_dataset(self.dataset_path, split=self.split)
-    
+
     @property
     def dataset(self):
         if not self._dataset:

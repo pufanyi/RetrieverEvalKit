@@ -1,15 +1,16 @@
 import hydra
+from omegaconf import DictConfig
 from rich.progress import (
+    BarColumn,
     Progress,
     SpinnerColumn,
     TextColumn,
-    BarColumn,
     TimeElapsedColumn,
     TimeRemainingColumn,
 )
-from omegaconf import DictConfig
 
 from img_search.utils.logging import print_config, setup_logger
+
 from ..data import get_dataset
 from ..embedding import get_encoder
 
@@ -43,9 +44,11 @@ def main(cfg: DictConfig):
             ):
                 dataset.build()
                 for data in progress.track(
-                    dataset, description=f"Embedding with {model.name} on {dataset.name}"
+                    dataset,
+                    description=f"Embedding with {model.name} on {dataset.name}",
                 ):
                     model.embed(data)
+
 
 if __name__ == "__main__":
     main()
