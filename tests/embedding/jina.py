@@ -12,3 +12,17 @@ if __name__ == "__main__":
     encoder.build()
     embedding = encoder.encode(image=img)
     print(embedding)
+
+    text_embedding = encoder.encode(
+        text="A big white dog with a small yellow dog", prompt_name="query"
+    )
+    print(encoder.model.similarity(text_embedding, embedding))
+
+    text_embedding = encoder.encode(
+        text="A big yellow dog with a small white dog", prompt_name="query"
+    )
+    print(encoder.model.similarity(text_embedding, embedding))
+
+    # Test image encoding
+    img_embedding = encoder.encode(text="Dogs", prompt_name="query")
+    print(encoder.model.similarity(img_embedding, embedding))
