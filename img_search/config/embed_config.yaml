@@ -1,4 +1,4 @@
 defaults:
   - models: jina_v4
   - logging: info
-  - dataset: inquire
+  - datasets: inquire
