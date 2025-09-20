@@ -1,2 +1,2 @@
-dataset: inquire
-path: evendrow/INQUIRE-Rerank
+- dataset: inquire
+  path: evendrow/INQUIRE-Rerank
