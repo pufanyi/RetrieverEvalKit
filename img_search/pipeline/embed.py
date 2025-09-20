@@ -2,7 +2,9 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 
 
-@hydra.main(config_path="../../config", version_base=None, config_name="config")
+@hydra.main(
+    config_path="pkg://img_search/config", version_base=None, config_name="config"
+)
 def main(cfg: DictConfig):
     print(OmegaConf.to_yaml(cfg))
 
