@@ -1,8 +1,8 @@
-from typing import override
+from typing import Literal, override
 
 import torch
 from PIL import Image
-from transformers import AutoModel
+from sentence_transformers import SentenceTransformer
 
 from .encoder import Encoder
 
@@ -21,15 +21,7 @@ class JinaV4Encoder(Encoder):
         self.tasks = {"retrieval", "text-matching", "code"}
 
     def build(self):
-        self._model = (
-            AutoModel.from_pretrained(
-                self.model_name,
-                trust_remote_code=True,
-                dtype=self.dtype,
-            )
-            .eval()
-            .to(self.device)
-        )
+        self._model = SentenceTransformer(self.model_name, trust_remote_code=True)
 
     @property
     def model(self):
@@ -43,7 +35,7 @@ class JinaV4Encoder(Encoder):
         texts: list[str] | None = None,
         images: list[Image.Image | str] | None = None,
         task: str | None = "retrieval",
-        prompt_name: str | None = "query",
+        prompt_name: Literal["query", "passage", "code"] | None = "query",
         **kwargs,
     ) -> torch.Tensor:
         if texts and images:
@@ -51,21 +43,15 @@ class JinaV4Encoder(Encoder):
         if task not in self.tasks:
             raise ValueError(f"Task {task} not found, available tasks: {self.tasks}")
         if texts:
-            AVAILABLE_PROMPT_NAMES = {"query", "passage", "code"}
-            if prompt_name not in AVAILABLE_PROMPT_NAMES:
-                raise ValueError(
-                    f"Prompt name {prompt_name} not found, "
-                    f"available prompt names: {AVAILABLE_PROMPT_NAMES}"
-                )
-            text_embeddings = self.model.encode_text(
-                texts=texts,
+            text_embeddings = self.model.encode(
+                sentences=texts,
                 task=task,
                 prompt_name=prompt_name,
             )
             return text_embeddings
         elif images:
-            image_embeddings = self.model.encode_image(
-                images=images,
+            image_embeddings = self.model.encode(
+                sentences=images,
                 task=task,
             )
             return image_embeddings
