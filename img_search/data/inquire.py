@@ -8,7 +8,17 @@ from .dataset import ImageDataset
 
 class InquireDataset(ImageDataset):
     def __init__(self, path: str = "evendrow/INQUIRE-Rerank"):
-        self.dataset = load_dataset(path)
+        self.dataset_path = path
+        self._dataset = None
+
+    def build(self):
+        self._dataset = load_dataset(self.dataset_path)
+    
+    @property
+    def dataset(self):
+        if not self._dataset:
+            self.build()
+        return self._dataset
 
     def length(self) -> int:
         return len(self.dataset)

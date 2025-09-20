@@ -12,6 +12,10 @@ class ImageDataset(ABC):
         return self.get_images()
 
     @abstractmethod
+    def build(self):
+        raise NotImplementedError
+
+    @abstractmethod
     def length(self) -> int:
         raise NotImplementedError
 
