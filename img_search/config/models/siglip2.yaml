@@ -1,3 +1,2 @@
-embedding:
-  model: siglip2
-  model_name: google/siglip2-base-patch32-256
+model: siglip2
+model_name: google/siglip2-base-patch32-256

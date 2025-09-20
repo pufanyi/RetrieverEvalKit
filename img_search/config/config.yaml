@@ -1,2 +1,2 @@
 defaults:
-  - models: siglip2
+  - models: jina_v4
