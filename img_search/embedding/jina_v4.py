@@ -14,6 +14,7 @@ class JinaV4Encoder(Encoder):
         device: str = "cuda",
         dtype: torch.dtype = torch.float16,
     ):
+        super().__init__("JinaV4")
         self.model_name = model_name
         self.device = device
         self.dtype = dtype

@@ -5,6 +5,9 @@ from PIL import Image
 
 
 class Encoder(ABC):
+    def __init__(self, name: str):
+        self.name = name
+
     @abstractmethod
     def batch_encode(
         self,

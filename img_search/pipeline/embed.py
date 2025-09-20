@@ -23,6 +23,11 @@ def main(cfg: DictConfig):
     models = []
     datasets = []
 
+    for model_cfg in cfg.models:
+        models.append(get_encoder(model_cfg))
+    for dataset_cfg in cfg.datasets:
+        datasets.append(get_dataset(dataset_cfg))
+
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -31,11 +36,6 @@ def main(cfg: DictConfig):
         TimeRemainingColumn(),
         TimeElapsedColumn(),
     ) as progress:
-        for model_cfg in progress.track(cfg.models, description="Loading models"):
-            models.append(get_encoder(model_cfg))
-        for dataset_cfg in progress.track(cfg.datasets, description="Loading datasets"):
-            datasets.append(get_dataset(dataset_cfg))
-
         for model in progress.track(models, description="Processing models"):
             model.build()
             for dataset in progress.track(

@@ -14,6 +14,7 @@ class Siglip2Encoder(Encoder):
         model_name: str = "google/siglip2-base-patch32-256",
         device_map: str = "auto",
     ):
+        super().__init__("Siglip2")
         self.model_name = model_name
         self.device_map = device_map
         self._model: AutoModel | None = None

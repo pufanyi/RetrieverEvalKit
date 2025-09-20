@@ -7,12 +7,14 @@ from .dataset import ImageDataset
 
 
 class InquireDataset(ImageDataset):
-    def __init__(self, path: str = "evendrow/INQUIRE-Rerank"):
+    def __init__(self, path: str = "evendrow/INQUIRE-Rerank", split="test"):
+        super().__init__("INQUIRE")
         self.dataset_path = path
         self._dataset = None
+        self.split=split
 
     def build(self):
-        self._dataset = load_dataset(self.dataset_path)
+        self._dataset = load_dataset(self.dataset_path, split=self.split)
     
     @property
     def dataset(self):
