@@ -25,6 +25,12 @@ class InquireDataset(ImageDataset):
     def length(self) -> int:
         return len(self.dataset)
 
-    def get_images(self) -> Iterator[Image.Image | str]:
+    def get_images(self, batch_size: int = 1) -> Iterator[list[Image.Image | str]]:
+        current_list = []
         for sample in self.dataset:
-            yield sample["image"]
+            current_list.append(sample["image"])
+            if len(current_list) == batch_size:
+                yield current_list
+                current_list = []
+        if current_list:
+            yield current_list

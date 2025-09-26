@@ -12,7 +12,10 @@ class ImageDataset(ABC):
         return self.length()
 
     def __iter__(self) -> Iterator[Image.Image | str]:
-        return self.get_images()
+        for batch in self.get_images(batch_size=1):
+            if len(batch) != 1:
+                raise ValueError(f"Batch size is not 1, but {len(batch)}")
+            yield batch[0]
 
     @abstractmethod
     def build(self):
@@ -23,5 +26,5 @@ class ImageDataset(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_images(self) -> Iterator[Image.Image | str]:
+    def get_images(self, batch_size: int = 1) -> Iterator[list[Image.Image | str]]:
         raise NotImplementedError
