@@ -1,12 +1,11 @@
-import logging
-import math
-from collections.abc import Sequence
-from concurrent.futures import ThreadPoolExecutor
 from typing import Literal, override
 
 import torch
 from PIL import Image
-from sentence_transformers import SentenceTransformer
+from transformers.image_utils import load_image
+from vllm import LLM
+from vllm.config import PoolerConfig
+from vllm.inputs.data import TextPrompt
 
 from .encoder import Encoder
 
@@ -14,7 +13,7 @@ from .encoder import Encoder
 class JinaV4Encoder(Encoder):
     def __init__(
         self,
-        model_name: str = "jinaai/jina-embeddings-v4",
+        model_name="jinaai/jina-embeddings-v4-vllm-retrieval",
         dtype: torch.dtype = torch.float16,
         device: str | torch.device | None = None,
         data_parallel: bool = False,
@@ -22,67 +21,15 @@ class JinaV4Encoder(Encoder):
         super().__init__("JinaV4")
         self.model_name = model_name
         self.dtype = dtype
-        self._requested_device = device
-        self._device = torch.device("cpu")
-        self._data_parallel = data_parallel
-        self._model: SentenceTransformer | None = None
-        self._replica_models: list[SentenceTransformer] = []
-        self.tasks = {"retrieval", "text-matching", "code"}
+        self.VISION_START_TOKEN_ID, self.VISION_END_TOKEN_ID = 151652, 151653
 
     def build(self):
-        logger = logging.getLogger(__name__)
-
-        base_model = SentenceTransformer(self.model_name, trust_remote_code=True)
-        base_model = base_model.to(dtype=self.dtype)
-        base_model.eval()
-
-        if self._requested_device is None:
-            if torch.cuda.is_available():
-                target_device = torch.device("cuda:0")
-            else:
-                target_device = torch.device("cpu")
-        else:
-            target_device = torch.device(self._requested_device)
-
-        use_data_parallel = self._data_parallel and torch.cuda.device_count() > 1
-
-        if use_data_parallel:
-            device_indices = list(range(torch.cuda.device_count()))
-            if target_device.type == "cuda" and target_device.index in device_indices:
-                device_indices.remove(target_device.index)
-                device_indices.insert(0, target_device.index)
-
-            state_dict = base_model.state_dict()
-            replicas: list[SentenceTransformer] = []
-            for order, index in enumerate(device_indices):
-                if order == 0:
-                    replica = base_model
-                else:
-                    replica = SentenceTransformer(
-                        self.model_name, trust_remote_code=True
-                    )
-                    replica.load_state_dict(state_dict)
-                    replica = replica.to(dtype=self.dtype)
-                    replica.eval()
-                replica.to(torch.device(f"cuda:{index}"))
-                replicas.append(replica)
-
-            self._model = replicas[0]
-            self._replica_models = replicas
-            primary_index = device_indices[0] if device_indices else 0
-            self._device = torch.device(f"cuda:{primary_index}")
-        else:
-            base_model.to(target_device)
-            self._model = base_model
-            self._replica_models = [base_model]
-            self._device = target_device
-
-        if self._data_parallel and not use_data_parallel:
-            logger.warning(
-                "Data parallel requested but only detected %d CUDA device(s); falling back to %s.",
-                torch.cuda.device_count(),
-                self._device,
-            )
+        self._model = LLM(
+            model=self.model_name,
+            task="auto",
+            override_pooler_config=PoolerConfig(pooling_type="ALL", normalize=False),
+            dtype=self.dtype,
+        )
 
     @property
     def model(self):
@@ -90,104 +37,71 @@ class JinaV4Encoder(Encoder):
             self.build()
         return self._model
 
-    @property
-    def device(self) -> torch.device:
-        return self._device
+    def get_text_prompt(
+        self, text: str, prompt_name: Literal["query", "passage", "code"]
+    ) -> TextPrompt:
+        if prompt_name == "query":
+            return TextPrompt(
+                prompt=f"Query: {text}",
+            )
+        elif prompt_name == "passage":
+            return TextPrompt(
+                prompt=f"Passage: {text}",
+            )
+        else:
+            raise ValueError(
+                f"Prompt name {prompt_name} not found, available prompt names: {['query', 'passage', 'code']}"
+            )
+
+    def get_image_prompt(self, image: Image.Image | str) -> TextPrompt:
+        pil_image = load_image(image)
+        return TextPrompt(
+            prompt=(
+                "<|im_start|>user\n"
+                + "<|vision_start|><|image_pad|><|vision_end|>"
+                + "Describe the image."
+                + "<|im_end|>\n"
+            ),
+            multi_modal_data={"image": pil_image},
+        )
 
     @override
     def batch_encode(
         self,
         texts: list[str] | None = None,
         images: list[Image.Image | str] | None = None,
-        task: str | None = "retrieval",
-        prompt_name: Literal["query", "passage", "code"] | None = "query",
+        prompt_name: Literal["query", "passage"] | None = "query",
         **kwargs,
     ) -> torch.Tensor:
-        # logger.info(f"Encoding {len(texts)} texts and {len(images)} images")
         if texts and images:
             raise ValueError("texts and images cannot be provided at the same time")
-        if task not in self.tasks:
-            raise ValueError(f"Task {task} not found, available tasks: {self.tasks}")
+        inputs = []
         if texts:
-            return self._encode_texts(texts, task=task, prompt_name=prompt_name)
+            inputs = [self.get_text_prompt(text, prompt_name) for text in texts]
         elif images:
-            return self._encode_images(images, task=task)
-        else:
-            raise ValueError("Please provide either texts or images")
+            inputs = [self.get_image_prompt(image) for image in images]
+        outputs = self.model.encode(inputs)
+        embeddings = []
+        for output in outputs:
+            if self.VISION_START_TOKEN_ID in output.prompt_token_ids:
+                # Gather only vision tokens
+                img_start_pos = torch.where(
+                    torch.tensor(output.prompt_token_ids) == self.VISION_START_TOKEN_ID
+                )[0][0]
+                img_end_pos = torch.where(
+                    torch.tensor(output.prompt_token_ids) == self.VISION_END_TOKEN_ID
+                )[0][0]
+                embeddings_tensor = output.outputs.data.detach().clone()[
+                    img_start_pos : img_end_pos + 1
+                ]
+            else:
+                # Use all tokens for text-only prompts
+                embeddings_tensor = output.outputs.data.detach().clone()
 
-    def _encode_texts(
-        self,
-        texts: Sequence[str],
-        *,
-        task: str,
-        prompt_name: Literal["query", "passage", "code"] | None,
-    ) -> torch.Tensor:
-        def run(model: SentenceTransformer, batch: Sequence[str]) -> torch.Tensor:
-            embeddings = model.encode(
-                sentences=list(batch),
-                task=task,
-                prompt_name=prompt_name,
-                convert_to_tensor=True,
-                show_progress_bar=False,
-                device=str(getattr(model, "_target_device", self.device)),
+            # Pool and normalize embeddings
+            pooled_output = (
+                embeddings_tensor.sum(dim=0, dtype=torch.float32)
+                / embeddings_tensor.shape[0]
             )
-            return embeddings.detach().cpu()
-
-        return self._run_parallel(texts, run)
-
-    def _encode_images(
-        self,
-        images: Sequence[Image.Image | str],
-        *,
-        task: str,
-    ) -> torch.Tensor:
-        def run(model: SentenceTransformer, batch: Sequence[Image.Image | str]) -> torch.Tensor:
-            embeddings = model.encode(
-                sentences=list(batch),
-                task=task,
-                convert_to_tensor=True,
-                show_progress_bar=False,
-                device=str(getattr(model, "_target_device", self.device)),
-            )
-            return embeddings.detach().cpu()
-
-        return self._run_parallel(images, run)
-
-    def _run_parallel(self, items: Sequence, worker_fn):
-        if not items:
-            embedding_dim = self.model.get_sentence_embedding_dimension()
-            return torch.empty((0, embedding_dim))
-
-        models = self._replica_models if self._replica_models else [self.model]
-        active_models = models[: min(len(items), len(models))]
-
-        if len(active_models) == 1:
-            return worker_fn(active_models[0], items)
-
-        slices = self._split_indices(len(items), len(active_models))
-        results: list[tuple[int, torch.Tensor]] = []
-
-        with ThreadPoolExecutor(max_workers=len(slices)) as executor:
-            futures = []
-            for model, (start, end) in zip(active_models, slices):
-                batch = items[start:end]
-                futures.append(
-                    (start, executor.submit(worker_fn, model, batch))
-                )
-
-            for start, future in futures:
-                results.append((start, future.result()))
-
-        results.sort(key=lambda item: item[0])
-        return torch.cat([tensor for _, tensor in results], dim=0)
-
-    @staticmethod
-    def _split_indices(length: int, parts: int) -> list[tuple[int, int]]:
-        chunk = max(1, math.ceil(length / parts))
-        ranges: list[tuple[int, int]] = []
-        start = 0
-        while start < length:
-            end = min(start + chunk, length)
-            ranges.append((start, end))
-            start = end
-        return ranges
+            embeddings.append(torch.nn.functional.normalize(pooled_output, dim=-1))
+        return embeddings

@@ -1,3 +1,4 @@
 - model: siglip2
   model_name: google/siglip2-base-patch32-256
-  kwargs: {}
+  kwargs:
+    data_parallel: true

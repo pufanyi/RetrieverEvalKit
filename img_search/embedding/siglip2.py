@@ -71,12 +71,15 @@ class Siglip2Encoder(Encoder):
                 self._device = target_device
             else:
                 first_param = next(backbone.parameters(), None)
-                inferred_device = first_param.device if first_param is not None else target_device
+                inferred_device = (
+                    first_param.device if first_param is not None else target_device
+                )
                 self._device = torch.device(inferred_device)
 
         if self._data_parallel and not use_data_parallel:
             logger.warning(
-                "Data parallel requested but only detected %d CUDA device(s); falling back to %s.",
+                "Data parallel requested but only detected %d CUDA device(s); "
+                "falling back to %s.",
                 torch.cuda.device_count(),
                 self._device,
             )

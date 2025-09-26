@@ -1,3 +1,2 @@
 - model: jina_v4
   model_name: jinaai/jina-embeddings-v4
-  kwargs: {}
