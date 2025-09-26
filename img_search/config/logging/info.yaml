@@ -22,6 +22,7 @@ handlers:
     backtrace: true
     diagnose: true
 module_levels:
+  vllm: WARNING
   sentence_transformers: WARNING
   transformers: WARNING
   datasets: WARNING

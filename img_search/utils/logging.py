@@ -10,6 +10,9 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 
 
+_MODULE_LEVELS: dict[str, Any] = {}
+
+
 class _InterceptHandler(logging.Handler):
     """Route standard logging records through Loguru."""
 
@@ -70,8 +73,24 @@ def _resolve_log_level(level: Any, module_name: str) -> int:
     )
 
 
+def _configure_module_logger(module_name: str, configured_level: Any | None) -> None:
+    std_logger = logging.getLogger(module_name)
+    std_logger.handlers.clear()
+    std_logger.propagate = True
+    if configured_level is not None:
+        std_logger.setLevel(_resolve_log_level(configured_level, module_name))
+
+
+def ensure_loguru_bridge(*module_names: str, default_level: Any | None = None) -> None:
+    targets = module_names or tuple(_MODULE_LEVELS.keys())
+    for module_name in targets:
+        configured_level = _MODULE_LEVELS.get(module_name, default_level)
+        _configure_module_logger(module_name, configured_level)
+
+
 def setup_logger(logging_cfg: DictConfig):
     """Set up the logger based on the provided hydra config."""
+    global _MODULE_LEVELS
     logger.remove()
 
     for handler_cfg in logging_cfg.handlers:
@@ -104,7 +123,7 @@ def setup_logger(logging_cfg: DictConfig):
     module_levels_cfg = logging_cfg.get("module_levels")
     if module_levels_cfg is None:
         module_levels: dict[str, Any] = {
-            "sentence_transformers": "WARNING",
+            "vllm": "WARNING",
             "transformers": "WARNING",
             "datasets": "WARNING",
         }
@@ -113,8 +132,7 @@ def setup_logger(logging_cfg: DictConfig):
         if not isinstance(module_levels, dict):
             raise TypeError("logging.module_levels must be a mapping")
 
-    for module_name, configured_level in module_levels.items():
-        std_logger = logging.getLogger(module_name)
-        std_logger.handlers.clear()
-        std_logger.propagate = True
-        std_logger.setLevel(_resolve_log_level(configured_level, module_name))
+    _MODULE_LEVELS = dict(module_levels)
+
+    for module_name, configured_level in _MODULE_LEVELS.items():
+        _configure_module_logger(module_name, configured_level)

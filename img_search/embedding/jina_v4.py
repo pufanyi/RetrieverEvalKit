@@ -7,6 +7,8 @@ from vllm import LLM
 from vllm.config import PoolerConfig
 from vllm.inputs.data import TextPrompt
 
+from img_search.utils.logging import ensure_loguru_bridge
+
 from .encoder import Encoder
 
 
@@ -29,7 +31,9 @@ class JinaV4Encoder(Encoder):
             task="auto",
             override_pooler_config=PoolerConfig(pooling_type="ALL", normalize=False),
             dtype=self.dtype,
+            runner="pooling"
         )
+        ensure_loguru_bridge("vllm", default_level="WARNING")
 
     @property
     def model(self):
