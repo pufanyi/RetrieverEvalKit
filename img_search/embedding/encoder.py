@@ -24,10 +24,17 @@ class Encoder(ABC):
 
     def encode(
         self,
-        text: str | None = None,
-        image: Image.Image | str | None = None,
+        text: str | list[str] | None = None,
+        image: Image.Image | str | list[Image.Image | str] | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        return self.batch_encode(
-            texts=[text] if text else None, images=[image] if image else None, **kwargs
-        )[0]
+        if isinstance(text, list) and isinstance(image, list):
+            return self.batch_encode(texts=text, images=image, **kwargs)
+        elif isinstance(text, list) or isinstance(image, list):
+            raise ValueError("text and image must be a single string or image")
+        else:
+            return self.batch_encode(
+                texts=[text] if text else None,
+                images=[image] if image else None,
+                **kwargs,
+            )[0]

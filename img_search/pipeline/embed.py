@@ -41,6 +41,8 @@ def embed_all(models, datasets, *, tasks_config: DictConfig):
                 for data in progress.track(
                     dataset.get_images(batch_size=tasks_config.batch_size),
                     description=f"Embedding with {model.name} on {dataset.name}",
+                    total=(dataset.length() + tasks_config.batch_size - 1)
+                    // tasks_config.batch_size,
                 ):
                     yield model.name, dataset.name, model.encode(image=data)
 
