@@ -7,14 +7,15 @@ from loguru import logger
 from omegaconf import DictConfig, OmegaConf
 from rich.logging import RichHandler
 from rich.panel import Panel
-
 from rich.syntax import Syntax
 
 
 class _InterceptHandler(logging.Handler):
     """Route standard logging records through Loguru."""
 
-    def emit(self, record: logging.LogRecord) -> None:  # pragma: no cover - thin wrapper
+    def emit(
+        self, record: logging.LogRecord
+    ) -> None:  # pragma: no cover - thin wrapper
         try:
             loguru_level = logger.level(record.levelname).name
         except ValueError:
@@ -79,4 +80,6 @@ def setup_logger(logging_cfg: DictConfig):
                 **handler_dict,
             )
 
-    logging.basicConfig(level=logging.NOTSET, handlers=[_InterceptHandler()], force=True)
+    logging.basicConfig(
+        level=logging.NOTSET, handlers=[_InterceptHandler()], force=True
+    )

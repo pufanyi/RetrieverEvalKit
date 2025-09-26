@@ -53,7 +53,7 @@ def main(cfg: DictConfig):
     print_config(cfg)
 
     models, datasets = get_models_and_datasets(cfg)
-    
+
     for model_name, dataset_name, embedding in embed_all(models, datasets):
         print(model_name, dataset_name, embedding)
 
