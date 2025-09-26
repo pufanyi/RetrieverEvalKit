@@ -1,4 +1,5 @@
 from typing import Literal, override
+from loguru import logger
 
 import torch
 from PIL import Image
@@ -39,6 +40,7 @@ class JinaV4Encoder(Encoder):
         prompt_name: Literal["query", "passage", "code"] | None = "query",
         **kwargs,
     ) -> torch.Tensor:
+        logger.info(f"Encoding {len(texts)} texts and {len(images)} images")
         if texts and images:
             raise ValueError("texts and images cannot be provided at the same time")
         if task not in self.tasks:

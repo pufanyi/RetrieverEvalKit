@@ -13,15 +13,19 @@ from rich.syntax import Syntax
 class _InterceptHandler(logging.Handler):
     """Route standard logging records through Loguru."""
 
-    def emit(
-        self, record: logging.LogRecord
-    ) -> None:  # pragma: no cover - thin wrapper
+    def emit(self, record: logging.LogRecord) -> None:  # pragma: no cover - thin wrapper
         try:
             loguru_level = logger.level(record.levelname).name
         except ValueError:
             loguru_level = record.levelno
 
-        logger.opt(depth=2, exception=record.exc_info).log(
+        frame = logging.currentframe()
+        depth = 2
+        while frame and frame.f_code.co_filename == logging.__file__:
+            frame = frame.f_back
+            depth += 1
+
+        logger.opt(depth=depth, exception=record.exc_info).log(
             loguru_level, record.getMessage()
         )
 
@@ -53,13 +57,11 @@ def setup_logger(logging_cfg: DictConfig):
     """Set up the logger based on the provided hydra config."""
     logger.remove()
 
-    # The config is now structured under 'handlers'
     for handler_cfg in logging_cfg.handlers:
         handler_dict: dict[str, Any] = dict(handler_cfg)
         sink = handler_dict.pop("sink")
 
         if sink == "rich":
-            # Pop RichHandler specific keys to avoid passing them to logger.add
             rich_tracebacks = handler_dict.pop("rich_tracebacks", True)
             show_path = handler_dict.pop("show_path", False)
             show_time = handler_dict.pop("show_time", False)
@@ -73,13 +75,17 @@ def setup_logger(logging_cfg: DictConfig):
                 **handler_dict,
             )
         else:
-            # For other sinks like sys.stderr
             actual_sink = sys.stderr if sink == "sys.stderr" else sink
-            logger.add(
-                actual_sink,
-                **handler_dict,
-            )
+            logger.add(actual_sink, **handler_dict)
 
     logging.basicConfig(
-        level=logging.NOTSET, handlers=[_InterceptHandler()], force=True
+        level=logging.NOTSET,
+        handlers=[_InterceptHandler()],
+        force=True,
     )
+
+    for library_logger in ("sentence_transformers", "transformers", "datasets"):
+        std_logger = logging.getLogger(library_logger)
+        std_logger.handlers.clear()
+        std_logger.propagate = True
+        std_logger.setLevel(logging.NOTSET)
