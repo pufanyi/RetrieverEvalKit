@@ -42,7 +42,7 @@ def embed_all(models, datasets):
                     dataset,
                     description=f"Embedding with {model.name} on {dataset.name}",
                 ):
-                    yield model.encode(data)
+                    yield model.name, dataset.name, model.encode(data)
 
 
 @hydra.main(
@@ -53,6 +53,9 @@ def main(cfg: DictConfig):
     print_config(cfg)
 
     models, datasets = get_models_and_datasets(cfg)
+    
+    for model_name, dataset_name, embedding in embed_all(models, datasets):
+        print(model_name, dataset_name, embedding)
 
 
 if __name__ == "__main__":
