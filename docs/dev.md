@@ -33,6 +33,10 @@ uv run python -m img_search.pipeline.embed \
   models=jina_v4
 ```
 
+The default Hydra config resolves to the `jinaai/jina-embeddings-v4-vllm-retrieval`
+checkpoint so the pooling runner is available when we call `LLM.encode()`. If you override
+`models.0.model_name`, make sure to pick a pooling-capable variant.
+
 Optional tweaks:
 
 - Force a specific primary GPU with `models.0.kwargs.device=cuda:1`.

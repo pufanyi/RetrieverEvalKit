@@ -1,111 +1,99 @@
-from typing import Literal, override
+from __future__ import annotations
+
+from typing import Literal, Sequence
 
 import torch
 from PIL import Image
-from transformers.image_utils import load_image
-from vllm import LLM
-from vllm.config import PoolerConfig
-from vllm.inputs.data import TextPrompt
-
-from img_search.utils.logging import ensure_loguru_bridge
+from sentence_transformers import SentenceTransformer
 
 from .encoder import Encoder
 
 
 class JinaV4Encoder(Encoder):
+    """SentenceTransformer-backed encoder for jinaai/jina-embeddings-v4."""
+
     def __init__(
         self,
-        model_name="jinaai/jina-embeddings-v4-vllm-retrieval",
-        dtype: torch.dtype = torch.float16,
+        model_name: str = "jinaai/jina-embeddings-v4",
         device: str | torch.device | None = None,
-        data_parallel: bool = False,
+        batch_size: int | None = None,
+        normalize_embeddings: bool = True,
     ):
         super().__init__("JinaV4")
         self.model_name = model_name
-        self.dtype = dtype
-        self.VISION_START_TOKEN_ID, self.VISION_END_TOKEN_ID = 151652, 151653
+        self._requested_device = device
+        self._batch_size = batch_size
+        self._normalize_embeddings = normalize_embeddings
+        self._model: SentenceTransformer | None = None
 
     def build(self):
-        self._model = LLM(
-            model=self.model_name,
-            task="auto",
-            override_pooler_config=PoolerConfig(pooling_type="ALL", normalize=False),
-            dtype=self.dtype,
-            runner="pooling"
-        )
-        ensure_loguru_bridge("vllm", default_level="WARNING")
+        load_kwargs: dict[str, object] = {"trust_remote_code": True}
+        if self._requested_device is not None:
+            load_kwargs["device"] = str(self._requested_device)
+        self._model = SentenceTransformer(self.model_name, **load_kwargs)
 
     @property
-    def model(self):
+    def model(self) -> SentenceTransformer:
         if self._model is None:
             self.build()
         return self._model
 
-    def get_text_prompt(
-        self, text: str, prompt_name: Literal["query", "passage", "code"]
-    ) -> TextPrompt:
-        if prompt_name == "query":
-            return TextPrompt(
-                prompt=f"Query: {text}",
-            )
-        elif prompt_name == "passage":
-            return TextPrompt(
-                prompt=f"Passage: {text}",
-            )
-        else:
-            raise ValueError(
-                f"Prompt name {prompt_name} not found, available prompt names: {['query', 'passage', 'code']}"
-            )
+    def _prepare_image_inputs(
+        self, images: Sequence[Image.Image | str]
+    ) -> list[Image.Image | str]:
+        prepared: list[Image.Image | str] = []
+        for image in images:
+            if isinstance(image, (Image.Image, str)):
+                prepared.append(image)
+            else:
+                raise TypeError(
+                    "Image inputs must be PIL.Image.Image or str (path or URL)."
+                )
+        return prepared
 
-    def get_image_prompt(self, image: Image.Image | str) -> TextPrompt:
-        pil_image = load_image(image)
-        return TextPrompt(
-            prompt=(
-                "<|im_start|>user\n"
-                + "<|vision_start|><|image_pad|><|vision_end|>"
-                + "Describe the image."
-                + "<|im_end|>\n"
-            ),
-            multi_modal_data={"image": pil_image},
-        )
+    def _encode(
+        self,
+        inputs: Sequence[str | Image.Image],
+        *,
+        task: str | None,
+        prompt_name: Literal["query", "passage", "code"] | None,
+        encode_kwargs: dict[str, object],
+    ) -> torch.Tensor | list[torch.Tensor]:
+        call_kwargs: dict[str, object] = {
+            "convert_to_tensor": True,
+            "normalize_embeddings": self._normalize_embeddings,
+        }
+        if self._batch_size is not None and "batch_size" not in encode_kwargs:
+            call_kwargs["batch_size"] = self._batch_size
+        if task is not None:
+            call_kwargs["task"] = task
+        if prompt_name is not None:
+            call_kwargs["prompt_name"] = prompt_name
+        call_kwargs.update(encode_kwargs)
+        return self.model.encode(inputs, **call_kwargs)
 
-    @override
     def batch_encode(
         self,
-        texts: list[str] | None = None,
-        images: list[Image.Image | str] | None = None,
-        prompt_name: Literal["query", "passage"] | None = "query",
+        texts: Sequence[str] | None = None,
+        images: Sequence[Image.Image | str] | None = None,
+        *,
+        task: str | None = None,
+        prompt_name: Literal["query", "passage", "code"] | None = None,
         **kwargs,
-    ) -> torch.Tensor:
-        if texts and images:
-            raise ValueError("texts and images cannot be provided at the same time")
-        inputs = []
-        if texts:
-            inputs = [self.get_text_prompt(text, prompt_name) for text in texts]
-        elif images:
-            inputs = [self.get_image_prompt(image) for image in images]
-        outputs = self.model.encode(inputs)
-        embeddings = []
-        for output in outputs:
-            if self.VISION_START_TOKEN_ID in output.prompt_token_ids:
-                # Gather only vision tokens
-                img_start_pos = torch.where(
-                    torch.tensor(output.prompt_token_ids) == self.VISION_START_TOKEN_ID
-                )[0][0]
-                img_end_pos = torch.where(
-                    torch.tensor(output.prompt_token_ids) == self.VISION_END_TOKEN_ID
-                )[0][0]
-                embeddings_tensor = output.outputs.data.detach().clone()[
-                    img_start_pos : img_end_pos + 1
-                ]
-            else:
-                # Use all tokens for text-only prompts
-                embeddings_tensor = output.outputs.data.detach().clone()
+    ) -> torch.Tensor | list[torch.Tensor]:
+        if texts is not None and images is not None:
+            raise ValueError("Provide either texts or images, not both.")
+        if texts is None and images is None:
+            raise ValueError("Either texts or images must be provided.")
 
-            # Pool and normalize embeddings
-            pooled_output = (
-                embeddings_tensor.sum(dim=0, dtype=torch.float32)
-                / embeddings_tensor.shape[0]
-            )
-            embeddings.append(torch.nn.functional.normalize(pooled_output, dim=-1))
-        return embeddings
+        if texts is not None:
+            inputs: Sequence[str | Image.Image] = list(texts)
+        else:
+            inputs = self._prepare_image_inputs(images or [])
+
+        return self._encode(
+            inputs,
+            task=task,
+            prompt_name=prompt_name,
+            encode_kwargs=dict(kwargs),
+        )
