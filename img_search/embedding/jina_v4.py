@@ -1,7 +1,7 @@
 from typing import Literal, override
-from loguru import logger
 
 import torch
+from loguru import logger
 from PIL import Image
 from sentence_transformers import SentenceTransformer
 

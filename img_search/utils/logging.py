@@ -13,7 +13,9 @@ from rich.syntax import Syntax
 class _InterceptHandler(logging.Handler):
     """Route standard logging records through Loguru."""
 
-    def emit(self, record: logging.LogRecord) -> None:  # pragma: no cover - thin wrapper
+    def emit(
+        self, record: logging.LogRecord
+    ) -> None:  # pragma: no cover - thin wrapper
         try:
             loguru_level = logger.level(record.levelname).name
         except ValueError:
