@@ -54,7 +54,8 @@ class JinaV4VLLMEncoder(Encoder):
             )
         else:
             raise ValueError(
-                f"Prompt name {prompt_name} not found, available prompt names: {['query', 'passage', 'code']}"
+                f"Prompt name {prompt_name} not found, "
+                f"available prompt names: {['query', 'passage', 'code']}"
             )
 
     def get_image_prompt(self, image: Image.Image | str) -> TextPrompt:
