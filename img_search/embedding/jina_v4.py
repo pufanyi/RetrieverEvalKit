@@ -30,6 +30,7 @@ class JinaV4Encoder(Encoder):
         self._default_task = default_task
         self._model_kwargs = dict(model_kwargs) if model_kwargs else {}
         self._model: SentenceTransformer | None = None
+        self._batch_size = batch_size
 
     def build(self):
         load_kwargs: dict[str, object] = {"trust_remote_code": True}

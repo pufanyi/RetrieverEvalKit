@@ -44,7 +44,8 @@ def embed_all(models, datasets, *, tasks_config: DictConfig):
                     total=(dataset.length() + tasks_config.batch_size - 1)
                     // tasks_config.batch_size,
                 ):
-                    yield model.name, dataset.name, model.encode(image=data)
+                    result = model.encode(image=data)
+                    yield model.name, dataset.name, result, result.shape
 
 
 @hydra.main(
@@ -56,10 +57,10 @@ def main(cfg: DictConfig):
 
     models, datasets = get_models_and_datasets(cfg)
 
-    for model_name, dataset_name, embedding in embed_all(
+    for model_name, dataset_name, embedding, shape in embed_all(
         models, datasets, tasks_config=cfg.tasks
     ):
-        print(model_name, dataset_name, embedding)
+        print(model_name, dataset_name, embedding, shape)
 
 
 if __name__ == "__main__":
