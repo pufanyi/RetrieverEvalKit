@@ -42,7 +42,7 @@ def embed_all(models, datasets):
                     dataset,
                     description=f"Embedding with {model.name} on {dataset.name}",
                 ):
-                    yield model.name, dataset.name, model.encode(data)
+                    yield model.name, dataset.name, model.encode(image=data)
 
 
 @hydra.main(

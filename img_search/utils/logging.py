@@ -55,6 +55,21 @@ def print_config(cfg: DictConfig, with_logging_cfg: bool = False):
     )
 
 
+def _resolve_log_level(level: Any, module_name: str) -> int:
+    if isinstance(level, int):
+        return level
+    if isinstance(level, str):
+        upper_level = level.upper()
+        resolved_level = getattr(logging, upper_level, None)
+        if isinstance(resolved_level, int):
+            return resolved_level
+
+    raise ValueError(
+        f"Invalid log level '{level}' for module '{module_name}'. "
+        "Expected an int or standard logging level name."
+    )
+
+
 def setup_logger(logging_cfg: DictConfig):
     """Set up the logger based on the provided hydra config."""
     logger.remove()
@@ -86,8 +101,20 @@ def setup_logger(logging_cfg: DictConfig):
         force=True,
     )
 
-    for library_logger in ("sentence_transformers", "transformers", "datasets"):
-        std_logger = logging.getLogger(library_logger)
+    module_levels_cfg = logging_cfg.get("module_levels")
+    if module_levels_cfg is None:
+        module_levels: dict[str, Any] = {
+            "sentence_transformers": "WARNING",
+            "transformers": "WARNING",
+            "datasets": "WARNING",
+        }
+    else:
+        module_levels = OmegaConf.to_container(module_levels_cfg, resolve=True)
+        if not isinstance(module_levels, dict):
+            raise TypeError("logging.module_levels must be a mapping")
+
+    for module_name, configured_level in module_levels.items():
+        std_logger = logging.getLogger(module_name)
         std_logger.handlers.clear()
         std_logger.propagate = True
-        std_logger.setLevel(logging.NOTSET)
+        std_logger.setLevel(_resolve_log_level(configured_level, module_name))

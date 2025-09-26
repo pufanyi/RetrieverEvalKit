@@ -21,3 +21,7 @@ handlers:
     enqueue: true
     backtrace: true
     diagnose: true
+module_levels:
+  sentence_transformers: WARNING
+  transformers: WARNING
+  datasets: WARNING
