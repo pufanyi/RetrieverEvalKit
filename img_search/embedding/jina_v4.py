@@ -4,6 +4,7 @@ from typing import Literal, Sequence
 
 import torch
 from PIL import Image
+from transformers.image_utils import load_image
 from sentence_transformers import SentenceTransformer
 
 from .encoder import Encoder
@@ -37,19 +38,6 @@ class JinaV4Encoder(Encoder):
         if self._model is None:
             self.build()
         return self._model
-
-    def _prepare_image_inputs(
-        self, images: Sequence[Image.Image | str]
-    ) -> list[Image.Image | str]:
-        prepared: list[Image.Image | str] = []
-        for image in images:
-            if isinstance(image, (Image.Image, str)):
-                prepared.append(image)
-            else:
-                raise TypeError(
-                    "Image inputs must be PIL.Image.Image or str (path or URL)."
-                )
-        return prepared
 
     def _encode(
         self,
@@ -87,9 +75,9 @@ class JinaV4Encoder(Encoder):
             raise ValueError("Either texts or images must be provided.")
 
         if texts is not None:
-            inputs: Sequence[str | Image.Image] = list(texts)
+            inputs = texts
         else:
-            inputs = self._prepare_image_inputs(images or [])
+            inputs = [load_image(image) for image in images]
 
         return self._encode(
             inputs,
