@@ -28,10 +28,8 @@ class Encoder(ABC):
         image: Image.Image | str | list[Image.Image | str] | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        if isinstance(text, list) and isinstance(image, list):
+        if isinstance(text, list) or isinstance(image, list):
             return self.batch_encode(texts=text, images=image, **kwargs)
-        elif isinstance(text, list) or isinstance(image, list):
-            raise ValueError("text and image must be a single string or image")
         else:
             return self.batch_encode(
                 texts=[text] if text else None,
