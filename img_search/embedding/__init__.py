@@ -19,9 +19,7 @@ def _collect_kwargs(cfg: DictConfig) -> dict[str, Any]:
 
     nested_kwargs = cfg.get("kwargs", None)
     if nested_kwargs is not None:
-        nested_kwargs_container = OmegaConf.to_container(
-            nested_kwargs, resolve=True
-        )
+        nested_kwargs_container = OmegaConf.to_container(nested_kwargs, resolve=True)
         if isinstance(nested_kwargs_container, dict):
             direct_kwargs.update(nested_kwargs_container)
 

@@ -9,7 +9,6 @@ from rich.logging import RichHandler
 from rich.panel import Panel
 from rich.syntax import Syntax
 
-
 _MODULE_LEVELS: dict[str, Any] = {}
 
 

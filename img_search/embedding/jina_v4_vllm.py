@@ -31,7 +31,7 @@ class JinaV4VLLMEncoder(Encoder):
             task="auto",
             override_pooler_config=PoolerConfig(pooling_type="LAST", normalize=False),
             dtype=self.dtype,
-            runner="pooling"
+            runner="pooling",
         )
         ensure_loguru_bridge("vllm", default_level="WARNING")
 
