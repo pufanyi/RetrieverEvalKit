@@ -2,3 +2,4 @@ defaults:
   - models: jina_v4
   - logging: info
   - datasets: inquire
+  - tasks: embed

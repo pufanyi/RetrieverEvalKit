@@ -23,7 +23,7 @@ def get_models_and_datasets(
     return models, datasets
 
 
-def embed_all(models, datasets):
+def embed_all(models, datasets, *, tasks_config: DictConfig):
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -39,7 +39,7 @@ def embed_all(models, datasets):
             ):
                 dataset.build()
                 for data in progress.track(
-                    dataset,
+                    dataset.get_images(batch_size=tasks_config.batch_size),
                     description=f"Embedding with {model.name} on {dataset.name}",
                 ):
                     yield model.name, dataset.name, model.encode(image=data)
@@ -54,7 +54,9 @@ def main(cfg: DictConfig):
 
     models, datasets = get_models_and_datasets(cfg)
 
-    for model_name, dataset_name, embedding in embed_all(models, datasets):
+    for model_name, dataset_name, embedding in embed_all(
+        models, datasets, tasks_config=cfg.tasks
+    ):
         print(model_name, dataset_name, embedding)
 
 
