@@ -32,7 +32,7 @@ def test_resolve_log_level_invalid(invalid_level):
 
 @patch("img_search.utils.logging.rich.print")
 def test_print_config(mock_rich_print: MagicMock):
-    """Test that the config is printed correctly, respecting the with_logging_cfg flag."""
+    """Test that the config is printed correctly."""
     cfg = OmegaConf.create({"key": "value", "logging": {"level": "INFO"}})
 
     # Case 1: with_logging_cfg = False (default)

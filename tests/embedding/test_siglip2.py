@@ -41,7 +41,7 @@ def test_siglip2_encode_image(siglip2_encoder, sample_image: Image.Image):
 
 
 def test_siglip2_encode_text(siglip2_encoder):
-    """Verify that encoding text returns an embedding with the correct shape and type."""
+    """Verify that encoding text returns an embedding of correct shape and type."""
     text_embedding = siglip2_encoder.encode(
         text="A big white dog with a small yellow dog"
     )
