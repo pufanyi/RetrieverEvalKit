@@ -1,4 +1,3 @@
-
 from collections.abc import Iterator
 
 import pytest
@@ -42,13 +41,15 @@ def test_image_dataset_len():
 
     assert len(dataset) == 2
 
+
 def test_iter_raises_error_on_incorrect_batch_size():
     """Test that the iterator raises a ValueError if get_images returns a batch > 1."""
+
     class BadDataset(MockImageDataset):
         def get_images(self, batch_size: int = 1) -> Iterator[list[str | Image.Image]]:
             # This implementation is wrong because it ignores batch_size=1 from __iter__
-            yield self.items # Yields the whole list as one batch
+            yield self.items  # Yields the whole list as one batch
 
     dataset = BadDataset(name="bad", items=["a", "b"])
     with pytest.raises(ValueError, match="Batch size is not 1, but 2"):
-        list(dataset) # Trigger the iterator
+        list(dataset)  # Trigger the iterator

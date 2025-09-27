@@ -1,6 +1,5 @@
-
 import logging
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from omegaconf import OmegaConf
@@ -19,7 +18,9 @@ from img_search.utils import logging as logging_utils
 )
 def test_resolve_log_level_valid(level_input, expected_output):
     """Test that valid log level names and integers are resolved correctly."""
-    assert logging_utils._resolve_log_level(level_input, "test_module") == expected_output
+    assert (
+        logging_utils._resolve_log_level(level_input, "test_module") == expected_output
+    )
 
 
 @pytest.mark.parametrize("invalid_level", ["INVALID_LEVEL", None, object()])
@@ -32,10 +33,7 @@ def test_resolve_log_level_invalid(invalid_level):
 @patch("img_search.utils.logging.rich.print")
 def test_print_config(mock_rich_print: MagicMock):
     """Test that the config is printed correctly, respecting the with_logging_cfg flag."""
-    cfg = OmegaConf.create({
-        "key": "value",
-        "logging": {"level": "INFO"}
-    })
+    cfg = OmegaConf.create({"key": "value", "logging": {"level": "INFO"}})
 
     # Case 1: with_logging_cfg = False (default)
     logging_utils.print_config(cfg)
@@ -59,16 +57,18 @@ def test_print_config(mock_rich_print: MagicMock):
 @patch("img_search.utils.logging.logging.basicConfig")
 def test_setup_logger(mock_basic_config: MagicMock, mock_loguru_logger: MagicMock):
     """Verify that setup_logger configures loguru and the standard logging bridge."""
-    logging_cfg = OmegaConf.create({
-        "handlers": [
-            {"sink": "sys.stderr", "level": "INFO"},
-            {"sink": "rich", "level": "DEBUG"},
-        ],
-        "module_levels": {
-            "my_app": "DEBUG",
-            "third_party": "WARNING",
-        },
-    })
+    logging_cfg = OmegaConf.create(
+        {
+            "handlers": [
+                {"sink": "sys.stderr", "level": "INFO"},
+                {"sink": "rich", "level": "DEBUG"},
+            ],
+            "module_levels": {
+                "my_app": "DEBUG",
+                "third_party": "WARNING",
+            },
+        }
+    )
 
     logging_utils.setup_logger(logging_cfg)
 

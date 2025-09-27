@@ -1,4 +1,3 @@
-
 from pathlib import Path
 
 import pytest
@@ -12,11 +11,13 @@ torch = pytest.importorskip("torch")
 
 @pytest.fixture(scope="module")
 def jina_encoder():
-    cfg = OmegaConf.create({
-        "model": "jina_v4",
-        "model_name": "jinaai/jina-embeddings-v4",
-        "batch_size": 64
-    })
+    cfg = OmegaConf.create(
+        {
+            "model": "jina_v4",
+            "model_name": "jinaai/jina-embeddings-v4",
+            "batch_size": 64,
+        }
+    )
     encoder = get_encoder(cfg)
     encoder.build()
     return encoder
@@ -29,7 +30,7 @@ def sample_image() -> Image.Image:
 
 
 def test_jina_encode_image(jina_encoder, sample_image: Image.Image):
-    """Verify that encoding an image returns an embedding with the correct shape and type."""
+    """Verify that encoding an image returns an embedding of correct shape and type."""
     embedding = jina_encoder.encode(image=sample_image)
 
     assert isinstance(embedding, torch.Tensor)
@@ -38,7 +39,7 @@ def test_jina_encode_image(jina_encoder, sample_image: Image.Image):
 
 
 def test_jina_encode_text(jina_encoder):
-    """Verify that encoding text returns an embedding with the correct shape and type."""
+    """Verify that encoding text returns an embedding of correct shape and type."""
     text_embedding = jina_encoder.encode(
         text="A big white dog with a small yellow dog", prompt_name="query"
     )
@@ -51,7 +52,7 @@ def test_jina_encode_text(jina_encoder):
 def test_jina_similarity(jina_encoder, sample_image: Image.Image):
     """Test similarity scores between text and image embeddings."""
     image_embedding = jina_encoder.encode(image=sample_image)
-    
+
     text_embedding_positive = jina_encoder.encode(
         text="A big white dog with a small yellow dog", prompt_name="query"
     )
@@ -59,8 +60,12 @@ def test_jina_similarity(jina_encoder, sample_image: Image.Image):
         text="A picture of a cat", prompt_name="query"
     )
 
-    similarity_positive = jina_encoder.model.similarity(text_embedding_positive, image_embedding)
-    similarity_negative = jina_encoder.model.similarity(text_embedding_negative, image_embedding)
+    similarity_positive = jina_encoder.model.similarity(
+        text_embedding_positive, image_embedding
+    )
+    similarity_negative = jina_encoder.model.similarity(
+        text_embedding_negative, image_embedding
+    )
 
     assert isinstance(similarity_positive, torch.Tensor)
     assert similarity_positive.item() > 0.5

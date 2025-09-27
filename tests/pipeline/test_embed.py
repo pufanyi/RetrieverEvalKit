@@ -1,4 +1,3 @@
-
 from unittest.mock import MagicMock, call
 
 import pytest
@@ -23,25 +22,31 @@ def mock_get_dataset(monkeypatch):
 
 def test_get_models_and_datasets(mock_get_encoder, mock_get_dataset):
     """Verify that models and datasets are created from the config."""
-    cfg = OmegaConf.create({
-        "models": [{"name": "model1"}, {"name": "model2"}],
-        "datasets": [{"name": "dataset1"}, {"name": "dataset2"}],
-    })
+    cfg = OmegaConf.create(
+        {
+            "models": [{"name": "model1"}, {"name": "model2"}],
+            "datasets": [{"name": "dataset1"}, {"name": "dataset2"}],
+        }
+    )
 
     models, datasets = embed.get_models_and_datasets(cfg)
 
     assert mock_get_encoder.call_count == 2
-    mock_get_encoder.assert_has_calls([
-        call(cfg.models[0]),
-        call(cfg.models[1]),
-    ])
+    mock_get_encoder.assert_has_calls(
+        [
+            call(cfg.models[0]),
+            call(cfg.models[1]),
+        ]
+    )
     assert models == [mock_get_encoder.return_value, mock_get_encoder.return_value]
 
     assert mock_get_dataset.call_count == 2
-    mock_get_dataset.assert_has_calls([
-        call(cfg.datasets[0]),
-        call(cfg.datasets[1]),
-    ])
+    mock_get_dataset.assert_has_calls(
+        [
+            call(cfg.datasets[0]),
+            call(cfg.datasets[1]),
+        ]
+    )
     assert datasets == [mock_get_dataset.return_value, mock_get_dataset.return_value]
 
 
@@ -53,7 +58,7 @@ def test_embed_all_yields_correct_data():
     model1 = MagicMock()
     model1.name = "model1"
     model1.encode.return_value = mock_embedding1
-    
+
     mock_embedding2 = MagicMock()
     mock_embedding2.shape = (1, 128)
     model2 = MagicMock()
@@ -88,8 +93,8 @@ def test_embed_all_yields_correct_data():
     assert dataset2.get_images.call_count == 2
 
     # Check encode calls
-    assert model1.encode.call_count == 3 # image_a, image_b, image_c
-    assert model2.encode.call_count == 3 # image_a, image_b, image_c
+    assert model1.encode.call_count == 3  # image_a, image_b, image_c
+    assert model2.encode.call_count == 3  # image_a, image_b, image_c
 
     # Check yielded results
     expected_results = [

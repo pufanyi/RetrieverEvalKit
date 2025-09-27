@@ -1,4 +1,3 @@
-
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -44,7 +43,7 @@ def test_inquire_dataset_lazy_build(mock_load_dataset: MagicMock):
 def test_inquire_dataset_length(mock_load_dataset: MagicMock):
     """Test that length returns the correct number of items."""
     dataset = InquireDataset()
-    assert len(dataset) == 3 # Based on the dummy_data in the fixture
+    assert len(dataset) == 3  # Based on the dummy_data in the fixture
 
 
 def test_inquire_get_images_batching(mock_load_dataset: MagicMock):
@@ -55,7 +54,7 @@ def test_inquire_get_images_batching(mock_load_dataset: MagicMock):
     batches = list(dataset.get_images(batch_size=2))
     assert len(batches) == 2
     assert len(batches[0]) == 2
-    assert len(batches[1]) == 1 # Remainder
+    assert len(batches[1]) == 1  # Remainder
 
     # Test with batch_size = 3 (exact match)
     batches = list(dataset.get_images(batch_size=3))
