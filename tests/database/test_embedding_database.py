@@ -1,32 +1,14 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
-SITE_PACKAGES = (
-    Path(__file__).resolve().parents[2]
-    / ".venv"
-    / f"lib/python{sys.version_info.major}.{sys.version_info.minor}"
-    / "site-packages"
-)
-if SITE_PACKAGES.exists():
-    site_path = str(SITE_PACKAGES)
-    if site_path not in sys.path:
-        sys.path.append(site_path)
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-root_path = str(PROJECT_ROOT)
-if root_path not in sys.path:
-    sys.path.append(root_path)
-
-np = pytest.importorskip("numpy")
-
 from img_search.database import embeddings as embeddings_module
 from img_search.database.embeddings import EmbeddingDatabase, _as_float_vectors
+
+np = pytest.importorskip("numpy")
 
 
 class DummyFieldSchema:
@@ -75,9 +57,9 @@ class FakeHit:
 
 
 class FakeCollection:
-    registry: dict[str, "FakeCollection"] = {}
+    registry: dict[str, FakeCollection] = {}
 
-    def __new__(cls, name: str, *args: Any, **kwargs: Any) -> "FakeCollection":
+    def __new__(cls, name: str, *args: Any, **kwargs: Any) -> FakeCollection:
         if kwargs.get("schema") is not None:
             instance = super().__new__(cls)
             cls.registry[name] = instance
@@ -195,7 +177,10 @@ def test_collection_initialization_creates_index() -> None:
 
 def test_add_embeddings_uses_upsert_and_returns_ids() -> None:
     db = EmbeddingDatabase("demo", dim=2)
-    vectors = [np.array([1.0, 0.0], dtype="float32"), np.array([0.0, 1.0], dtype="float32")]
+    vectors = [
+        np.array([1.0, 0.0], dtype="float32"),
+        np.array([0.0, 1.0], dtype="float32"),
+    ]
 
     ids = db.add_embeddings(
         ids=["a", "b"],

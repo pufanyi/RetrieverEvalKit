@@ -1,29 +1,11 @@
 import io
-import sys
 from pathlib import Path
 
 import pytest
 
-SITE_PACKAGES = (
-    Path(__file__).resolve().parents[2]
-    / ".venv"
-    / f"lib/python{sys.version_info.major}.{sys.version_info.minor}"
-    / "site-packages"
-)
-if SITE_PACKAGES.exists():
-    site_path = str(SITE_PACKAGES)
-    if site_path not in sys.path:
-        sys.path.append(site_path)
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-root_path = str(PROJECT_ROOT)
-if root_path not in sys.path:
-    sys.path.append(root_path)
-
-pytest.importorskip("PIL")
-from PIL import Image
-
 from img_search.database.images import ImageDatabase
+
+Image = pytest.importorskip("PIL.Image")
 
 
 @pytest.fixture()
