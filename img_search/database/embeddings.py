@@ -59,7 +59,8 @@ def _as_float_vectors(vectors: Iterable[np.ndarray], *, dim: int) -> list[list[f
             raise ValueError("Each embedding must be a one-dimensional vector")
         if array.shape[0] != dim:
             raise ValueError(
-                f"Embedding dimension mismatch: expected {dim}, received {array.shape[0]}"
+                f"Embedding dimension mismatch: expected {dim}, "
+                f"received {array.shape[0]}"
             )
         data.append(array.tolist())
     return data
