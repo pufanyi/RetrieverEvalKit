@@ -23,8 +23,13 @@ dependencies = [
 dev = [
     "pre-commit>=4.3.0",
     "pytest>=8.4.2",
+    "pytest-xdist>=3.8.0",
     "ruff>=0.12.11",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = "."
+filterwarnings = [
+    "ignore:.*SwigPyPacked.*:DeprecationWarning",
+    "ignore:.*SwigPyObject.*:DeprecationWarning",
+]

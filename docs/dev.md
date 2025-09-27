@@ -14,6 +14,14 @@ Before committing, run the following command to check the code style:
 uv run pre-commit run --all-files
 ```
 
+## Run Tests
+
+Execute the automated test suite with pytest. The `-n auto` flag parallelises the run across all logical CPU cores so the smoke scripts finish quickly:
+
+```bash
+uv run pytest -n auto
+```
+
 ## Multi-GPU Embedding with Accelerate
 
 The `JinaV4Encoder` ships with an optional Accelerate integration so you can fan embedding
