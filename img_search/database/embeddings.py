@@ -33,11 +33,10 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
-from pymilvus import (  # type: ignore[import-untyped]
+from pymilvus import (
     Collection,
     CollectionSchema,
     DataType,
@@ -71,22 +70,45 @@ def _make_expr(field: str, ids: Sequence[str]) -> str:
     return f"{field} in [{quoted}]"
 
 
-@dataclass(slots=True)
 class EmbeddingDatabase:
     """Milvus collection wrapper for storing and querying embeddings."""
 
-    collection_name: str
-    dim: int
-    host: str = "127.0.0.1"
-    port: int | str = 19530
-    alias: str = "default"
-    metric_type: str = "IP"
-    index_type: str = "HNSW"
-    index_params: dict[str, Any] | None = None
-    load_on_init: bool = True
-    _collection: Collection | None = field(init=False, repr=False, default=None)
+    __slots__ = (
+        "collection_name",
+        "dim",
+        "host",
+        "port",
+        "alias",
+        "metric_type",
+        "index_type",
+        "index_params",
+        "load_on_init",
+        "_collection",
+    )
 
-    def __post_init__(self) -> None:
+    def __init__(
+        self,
+        collection_name: str,
+        dim: int,
+        *,
+        host: str = "127.0.0.1",
+        port: int | str = 19530,
+        alias: str = "default",
+        metric_type: str = "IP",
+        index_type: str = "HNSW",
+        index_params: dict[str, Any] | None = None,
+        load_on_init: bool = True,
+    ) -> None:
+        self.collection_name = collection_name
+        self.dim = dim
+        self.host = host
+        self.port = port
+        self.alias = alias
+        self.metric_type = metric_type
+        self.index_type = index_type
+        self.index_params = index_params
+        self.load_on_init = load_on_init
+        self._collection: Collection | None = None
         self._connect()
         self._collection = self._ensure_collection()
         if self.load_on_init:
