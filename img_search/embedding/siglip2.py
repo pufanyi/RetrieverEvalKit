@@ -106,13 +106,26 @@ class Siglip2Encoder(Encoder):
         return self._processor
 
     @override
-    def batch_encode(self, images: list[Image.Image | str], **kwargs) -> torch.Tensor:
-        images = [load_image(image) for image in images]
-        inputs = self.processor(images=images, return_tensors="pt").to(self.device)
+    def batch_encode(
+        self,
+        texts: list[str] | None = None,
+        images: list[Image.Image | str] | None = None,
+        **kwargs,
+    ) -> torch.Tensor:
         model = self.model
+
         with torch.no_grad():
-            if isinstance(model, torch.nn.DataParallel):
-                outputs = model(**inputs)
-            else:
-                outputs = model.get_image_features(**inputs)
-        return outputs
+            if images:
+                processed_images = [load_image(image) for image in images]
+                inputs = self.processor(
+                    images=processed_images, return_tensors="pt"
+                ).to(self.device)
+                if isinstance(model, torch.nn.DataParallel):
+                    return model(**inputs)
+                return model.get_image_features(**inputs)
+
+            if texts:
+                inputs = self.processor(text=texts, return_tensors="pt").to(self.device)
+                return model.module.backbone.get_text_features(**inputs)
+
+        raise ValueError("Either images or texts must be provided to batch_encode")

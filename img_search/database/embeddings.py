@@ -31,13 +31,13 @@ creation on first use.  Consumers only need a running Milvus instance – e.g.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import numpy as np
-from pymilvus import (  # type: ignore[import-untyped]
+from pymilvus import (
     Collection,
     CollectionSchema,
     DataType,
@@ -46,6 +46,16 @@ from pymilvus import (  # type: ignore[import-untyped]
     connections,
     utility,
 )
+
+try:  # Optional dependency when Hydra isn't installed in minimal contexts
+    from omegaconf import DictConfig, OmegaConf
+except ModuleNotFoundError:  # pragma: no cover - Hydra-less environments
+
+    class _DictConfigFallback:  # type: ignore[too-many-ancestors]
+        pass
+
+    DictConfig = _DictConfigFallback  # type: ignore[assignment]
+    OmegaConf = None  # type: ignore[assignment]
 
 DEFAULT_INDEX_PARAMS: dict[str, Any] = {"M": 16, "efConstruction": 200}
 DEFAULT_SEARCH_PARAMS: dict[str, Any] = {"params": {"ef": 64}}
@@ -71,22 +81,116 @@ def _make_expr(field: str, ids: Sequence[str]) -> str:
     return f"{field} in [{quoted}]"
 
 
-@dataclass(slots=True)
+def _config_to_dict(cfg: DictConfig | Mapping[str, Any]) -> dict[str, Any]:
+    if OmegaConf is not None and isinstance(cfg, DictConfig):
+        container = OmegaConf.to_container(cfg, resolve=True)
+    else:
+        container = cfg
+    if not isinstance(container, Mapping):
+        raise TypeError("Embedding database config must be a mapping")
+    return {str(key): value for key, value in container.items()}
+
+
+def create_embedding_database(
+    cfg: DictConfig | Mapping[str, Any],
+    *,
+    dim: int,
+) -> EmbeddingDatabase:
+    """Instantiate :class:`EmbeddingDatabase` from a Hydra/OmegaConf config."""
+
+    config = _config_to_dict(cfg)
+
+    connection_cfg = config.get("connection", {})
+    if connection_cfg is None:
+        connection_cfg = {}
+    if not isinstance(connection_cfg, Mapping):
+        raise TypeError("database.connection must be a mapping when provided")
+
+    index_cfg = config.get("index", {})
+    if index_cfg is None:
+        index_cfg = {}
+    if not isinstance(index_cfg, Mapping):
+        raise TypeError("database.index must be a mapping when provided")
+
+    storage_cfg = config.get("storage", {})
+    if storage_cfg is None:
+        storage_cfg = {}
+    if not isinstance(storage_cfg, Mapping):
+        raise TypeError("database.storage must be a mapping when provided")
+
+    collection_name = config.get("collection_name", "img_embeddings")
+    host = connection_cfg.get("host", "127.0.0.1")
+    port = connection_cfg.get("port", 19530)
+    alias = connection_cfg.get("alias", "default")
+    metric_type = config.get("metric_type", "IP")
+
+    index_type = index_cfg.get("type", config.get("index_type", "HNSW"))
+    index_params = index_cfg.get("params", config.get("index_params"))
+    if index_params is not None and not isinstance(index_params, Mapping):
+        raise TypeError("database.index.params must be a mapping when provided")
+    index_params_dict = (
+        dict(index_params) if isinstance(index_params, Mapping) else None
+    )
+
+    load_on_init = config.get("load_on_init", True)
+    storage_path = storage_cfg.get("path", config.get("path"))
+
+    return EmbeddingDatabase(
+        collection_name,
+        dim,
+        host=str(host),
+        port=port,
+        alias=str(alias),
+        metric_type=str(metric_type),
+        index_type=str(index_type),
+        index_params=index_params_dict,
+        load_on_init=bool(load_on_init),
+        storage_path=storage_path,
+    )
+
+
 class EmbeddingDatabase:
     """Milvus collection wrapper for storing and querying embeddings."""
 
-    collection_name: str
-    dim: int
-    host: str = "127.0.0.1"
-    port: int | str = 19530
-    alias: str = "default"
-    metric_type: str = "IP"
-    index_type: str = "HNSW"
-    index_params: dict[str, Any] | None = None
-    load_on_init: bool = True
-    _collection: Collection | None = field(init=False, repr=False, default=None)
+    __slots__ = (
+        "collection_name",
+        "dim",
+        "host",
+        "port",
+        "alias",
+        "metric_type",
+        "index_type",
+        "index_params",
+        "load_on_init",
+        "storage_path",
+        "_collection",
+    )
 
-    def __post_init__(self) -> None:
+    def __init__(
+        self,
+        collection_name: str,
+        dim: int,
+        *,
+        host: str = "127.0.0.1",
+        port: int | str = 19530,
+        alias: str = "default",
+        metric_type: str = "IP",
+        index_type: str = "HNSW",
+        index_params: dict[str, Any] | None = None,
+        load_on_init: bool = True,
+        storage_path: str | Path | None = None,
+    ) -> None:
+        self.collection_name = collection_name
+        self.dim = dim
+        self.host = host
+        self.port = port
+        self.alias = alias
+        self.metric_type = metric_type
+        self.index_type = index_type
+        self.index_params = index_params
+        self.load_on_init = load_on_init
+        self.storage_path = Path(storage_path) if storage_path is not None else None
+        self._collection: Collection | None = None
         self._connect()
         self._collection = self._ensure_collection()
         if self.load_on_init:
@@ -257,4 +361,4 @@ class EmbeddingDatabase:
             self.flush()
 
 
-__all__ = ["EmbeddingDatabase"]
+__all__ = ["EmbeddingDatabase", "create_embedding_database"]
