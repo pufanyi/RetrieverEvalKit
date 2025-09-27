@@ -47,7 +47,6 @@ from pymilvus import (  # type: ignore[import-untyped]
     utility,
 )
 
-
 DEFAULT_INDEX_PARAMS: dict[str, Any] = {"M": 16, "efConstruction": 200}
 DEFAULT_SEARCH_PARAMS: dict[str, Any] = {"params": {"ef": 64}}
 
@@ -203,7 +202,10 @@ class EmbeddingDatabase:
         search_params: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         vector = _as_float_vectors([query], dim=self.dim)[0]
-        params = search_params or {**DEFAULT_SEARCH_PARAMS, "metric_type": self.metric_type}
+        params = search_params or {
+            **DEFAULT_SEARCH_PARAMS,
+            "metric_type": self.metric_type,
+        }
         self.collection.load()
         results = self.collection.search(
             data=[vector],
