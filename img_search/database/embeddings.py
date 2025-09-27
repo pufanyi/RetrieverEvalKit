@@ -50,6 +50,7 @@ from pymilvus import (
 try:  # Optional dependency when Hydra isn't installed in minimal contexts
     from omegaconf import DictConfig, OmegaConf
 except ModuleNotFoundError:  # pragma: no cover - Hydra-less environments
+
     class _DictConfigFallback:  # type: ignore[too-many-ancestors]
         pass
 
@@ -94,7 +95,7 @@ def create_embedding_database(
     cfg: DictConfig | Mapping[str, Any],
     *,
     dim: int,
-) -> "EmbeddingDatabase":
+) -> EmbeddingDatabase:
     """Instantiate :class:`EmbeddingDatabase` from a Hydra/OmegaConf config."""
 
     config = _config_to_dict(cfg)
@@ -127,7 +128,9 @@ def create_embedding_database(
     index_params = index_cfg.get("params", config.get("index_params"))
     if index_params is not None and not isinstance(index_params, Mapping):
         raise TypeError("database.index.params must be a mapping when provided")
-    index_params_dict = dict(index_params) if isinstance(index_params, Mapping) else None
+    index_params_dict = (
+        dict(index_params) if isinstance(index_params, Mapping) else None
+    )
 
     load_on_init = config.get("load_on_init", True)
     storage_path = storage_cfg.get("path", config.get("path"))
