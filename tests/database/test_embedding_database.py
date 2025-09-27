@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
 from img_search.database import embeddings as embeddings_module
-from img_search.database.embeddings import EmbeddingDatabase, _as_float_vectors
+from img_search.database.embeddings import (
+    EmbeddingDatabase,
+    _as_float_vectors,
+    create_embedding_database,
+)
 
 np = pytest.importorskip("numpy")
 
@@ -170,6 +175,41 @@ def test_collection_initialization_creates_index() -> None:
                 "index_type": db.index_type,
                 "metric_type": db.metric_type,
                 "params": embeddings_module.DEFAULT_INDEX_PARAMS,
+            },
+        )
+    ]
+
+
+def test_create_embedding_database_from_config() -> None:
+    cfg = {
+        "collection_name": "cfg_collection",
+        "connection": {"host": "milvus", "port": 19531, "alias": "cfg"},
+        "metric_type": "L2",
+        "index": {"type": "DISKANN", "params": {"search_list": 50}},
+        "storage": {"path": "database/embeddings.db"},
+        "load_on_init": False,
+    }
+
+    db = create_embedding_database(cfg, dim=8)
+
+    assert db.collection_name == "cfg_collection"
+    assert db.host == "milvus"
+    assert db.port == 19531
+    assert db.alias == "cfg"
+    assert db.metric_type == "L2"
+    assert db.index_type == "DISKANN"
+    assert db.index_params == {"search_list": 50}
+    assert db.storage_path == Path("database/embeddings.db")
+    assert db.dim == 8
+    collection = FakeCollection.registry["cfg_collection"]
+    assert collection.loaded is False
+    assert collection.indexes == [
+        (
+            "vector",
+            {
+                "index_type": "DISKANN",
+                "metric_type": "L2",
+                "params": {"search_list": 50},
             },
         )
     ]
