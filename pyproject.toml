@@ -29,7 +29,3 @@ dev = [
 
 [tool.pytest.ini_options]
 pythonpath = "."
-filterwarnings = [
-    "ignore:.*SwigPyPacked.*:DeprecationWarning",
-    "ignore:.*SwigPyObject.*:DeprecationWarning",
-]
