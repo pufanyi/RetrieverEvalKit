@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import torch
 import hydra
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -11,6 +12,7 @@ from rich.progress import (
     TimeElapsedColumn,
     TimeRemainingColumn,
 )
+from accelerate import Accelerator
 from omegaconf import DictConfig
 
 from img_search.utils.logging import print_config, setup_logger
@@ -27,7 +29,7 @@ def get_models_and_datasets(
     return models, datasets
 
 
-def embed_all(models, datasets, *, tasks_config: DictConfig):
+def embed_all(models, datasets, *, tasks_config: DictConfig, accelerator: Accelerator):
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -36,22 +38,37 @@ def embed_all(models, datasets, *, tasks_config: DictConfig):
         TimeRemainingColumn(),
         TimeElapsedColumn(),
     ) as progress:
-        for model in progress.track(models, description="Processing models"):
+        main_process_progress = progress if accelerator.is_main_process else None
+
+        for model in progress.track(models, description="Processing models", disable=not accelerator.is_main_process):
             model.build()
             for dataset in progress.track(
-                datasets, description=f"Processing datasets for {model.name}"
+                datasets, description=f"Processing datasets for {model.name}", disable=not accelerator.is_main_process
             ):
                 dataset.build()
-                for data_with_ids in progress.track(
-                    dataset.get_images(batch_size=tasks_config.batch_size),
+                data_loader = dataset.get_images(batch_size=tasks_config.batch_size)
+                data_loader = accelerator.prepare(data_loader)
+                
+                task = main_process_progress.add_task(
                     description=f"Embedding with {model.name} on {dataset.name}",
                     total=(dataset.length() + tasks_config.batch_size - 1)
                     // tasks_config.batch_size,
-                ):
-                    # import pdb; pdb.set_trace()
+                    visible=accelerator.is_main_process
+                ) if main_process_progress else None
+
+                for data_with_ids in data_loader:
                     ids, data = zip(*data_with_ids)
-                    result = model.encode(image=list(data))
-                    yield model.name, dataset.name, ids, result
+                    result = model.batch_encode(images=list(data))
+                    
+                    # Gather results from all processes to the main process for writing
+                    all_ids = accelerator.gather_for_metrics(list(ids))
+                    all_embeddings = accelerator.gather_for_metrics(result.cpu())
+
+                    if accelerator.is_main_process:
+                        yield model.name, dataset.name, all_ids, all_embeddings
+                    
+                    if main_process_progress and task is not None:
+                        main_process_progress.update(task, advance=1)
 
 
 @hydra.main(
@@ -66,32 +83,38 @@ def main(cfg: DictConfig):
     output_path.parent.mkdir(parents=True, exist_ok=True)
     writer: pq.ParquetWriter | None = None
 
+    accelerator = Accelerator()
     models, datasets = get_models_and_datasets(cfg)
 
     try:
         for model_name, dataset_name, ids, embeddings in embed_all(
-            models, datasets, tasks_config=cfg.tasks
+            models, datasets, tasks_config=cfg.tasks, accelerator=accelerator
         ):
+            # Only the main process writes the file
+            if not accelerator.is_main_process:
+                continue
+
             # 2. Convert batch data to an Arrow Table
             batch_table = pa.Table.from_pydict(
                 {
                     "id": ids,
                     "model_name": [model_name] * len(ids),
                     "dataset_name": [dataset_name] * len(ids),
-                    "embedding": embeddings.tolist(),
+                    "embedding": embeddings.numpy().tolist(),
                 }
             )
 
             # 3. Initialize writer (on first write) and write data
             if writer is None:
-                writer = pq.ParquetWriter(output_path, batch_table.schema)
+                writer = pq.ParquetWriter(str(output_path), batch_table.schema)
             writer.write_table(table=batch_table)
 
     finally:
         # 4. Ensure the writer is properly closed
         if writer:
             writer.close()
-            print(f"✅ Embeddings successfully saved to {output_path}")
+            if accelerator.is_main_process:
+                print(f"✅ Embeddings successfully saved to {output_path}")
 
 
 if __name__ == "__main__":
