@@ -1,4 +1,1 @@
-batch_size: 64
-output_dataset: pufanyi/jina_v4_embeddings
-db_cache:
-  images: database/images.db
+batch_size: 512

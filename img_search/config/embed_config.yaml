@@ -1,5 +1,8 @@
 defaults:
   - models: jina_v4
   - logging: info
-  - datasets: inquire
+  - datasets: flickr30k
   - tasks: embed
+  - _self_
+
+output_path: "data/flickr30k/embeddings/image.parquet"

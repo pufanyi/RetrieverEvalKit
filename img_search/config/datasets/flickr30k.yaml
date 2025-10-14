@@ -1,0 +1,2 @@
+_target_: img_search.data.flickr30k.Flickr30kDataset
+path: "data/flickr30k"

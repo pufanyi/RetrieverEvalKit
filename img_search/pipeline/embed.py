@@ -1,5 +1,8 @@
+from pathlib import Path
+
 import hydra
-from omegaconf import DictConfig
+import pyarrow as pa
+import pyarrow.parquet as pq
 from rich.progress import (
     BarColumn,
     Progress,
@@ -8,9 +11,9 @@ from rich.progress import (
     TimeElapsedColumn,
     TimeRemainingColumn,
 )
+from omegaconf import DictConfig
 
 from img_search.utils.logging import print_config, setup_logger
-
 from ..data import ImageDataset, get_dataset
 from ..embedding import Encoder, get_encoder
 
@@ -45,7 +48,7 @@ def embed_all(models, datasets, *, tasks_config: DictConfig):
                     // tasks_config.batch_size,
                 ):
                     result = model.encode(image=data)
-                    yield model.name, dataset.name, ids, result, result.shape
+                    yield model.name, dataset.name, ids, result
 
 
 @hydra.main(
@@ -55,13 +58,37 @@ def main(cfg: DictConfig):
     setup_logger(cfg.logging)
     print_config(cfg)
 
-    models, datasets = get_models_and_datasets(cfg)
-    results = []
+    # 1. Prepare output file and writer
+    output_path = Path(cfg.output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    writer: pq.ParquetWriter | None = None
 
-    for model_name, dataset_name, ids, embedding, shape in embed_all(
-        models, datasets, tasks_config=cfg.tasks
-    ):
-        results.append((model_name, dataset_name, ids, embedding, shape))
+    models, datasets = get_models_and_datasets(cfg)
+
+    try:
+        for model_name, dataset_name, ids, embeddings in embed_all(
+            models, datasets, tasks_config=cfg.tasks
+        ):
+            # 2. Convert batch data to an Arrow Table
+            batch_table = pa.Table.from_pydict(
+                {
+                    "id": ids,
+                    "model_name": [model_name] * len(ids),
+                    "dataset_name": [dataset_name] * len(ids),
+                    "embedding": embeddings.tolist(),
+                }
+            )
+
+            # 3. Initialize writer (on first write) and write data
+            if writer is None:
+                writer = pq.ParquetWriter(output_path, batch_table.schema)
+            writer.write_table(table=batch_table)
+
+    finally:
+        # 4. Ensure the writer is properly closed
+        if writer:
+            writer.close()
+            print(f"✅ Embeddings successfully saved to {output_path}")
 
 
 if __name__ == "__main__":
