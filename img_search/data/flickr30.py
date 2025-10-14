@@ -6,9 +6,9 @@ from PIL import Image
 from .dataset import ImageDataset
 
 
-class InquireDataset(ImageDataset):
-    def __init__(self, path: str = "evendrow/INQUIRE-Rerank", split="test"):
-        super().__init__("INQUIRE")
+class Flickr30kDataset(ImageDataset):
+    def __init__(self, path: str = "lmms-lab/flickr30k", split="test"):
+        super().__init__("Flickr30k")
         self.dataset_path = path
         self._dataset = None
         self.split = split
@@ -28,7 +28,8 @@ class InquireDataset(ImageDataset):
     def get_images(self, batch_size: int = 1) -> Iterator[list[tuple[str, Image.Image | str]]]:
         current_list = []
         for sample in self.dataset:
-            current_list.append((sample["caption"], sample["image"]))
+            _id = sample["filename"].split(".")[0]
+            current_list.append((_id, sample["image"]))
             if len(current_list) == batch_size:
                 yield current_list
                 current_list = []

@@ -38,14 +38,14 @@ def embed_all(models, datasets, *, tasks_config: DictConfig):
                 datasets, description=f"Processing datasets for {model.name}"
             ):
                 dataset.build()
-                for data in progress.track(
+                for ids, data in progress.track(
                     dataset.get_images(batch_size=tasks_config.batch_size),
                     description=f"Embedding with {model.name} on {dataset.name}",
                     total=(dataset.length() + tasks_config.batch_size - 1)
                     // tasks_config.batch_size,
                 ):
                     result = model.encode(image=data)
-                    yield model.name, dataset.name, result, result.shape
+                    yield model.name, dataset.name, ids, result, result.shape
 
 
 @hydra.main(
@@ -56,11 +56,12 @@ def main(cfg: DictConfig):
     print_config(cfg)
 
     models, datasets = get_models_and_datasets(cfg)
+    results = []
 
-    for model_name, dataset_name, embedding, shape in embed_all(
+    for model_name, dataset_name, ids, embedding, shape in embed_all(
         models, datasets, tasks_config=cfg.tasks
     ):
-        print(model_name, dataset_name, embedding, shape)
+        results.append((model_name, dataset_name, ids, embedding, shape))
 
 
 if __name__ == "__main__":
