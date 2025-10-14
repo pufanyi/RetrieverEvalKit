@@ -26,7 +26,7 @@ class Encoder(ABC):
         self,
         text: str | list[str] | None = None,
         image: Image.Image | str | list[Image.Image | str] | None = None,
-        **kwargs
+        **kwargs,
     ) -> torch.Tensor:
         if isinstance(text, list) or isinstance(image, list):
             return self.batch_encode(texts=text, images=image, **kwargs)

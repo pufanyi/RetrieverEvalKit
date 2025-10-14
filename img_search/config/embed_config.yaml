@@ -4,5 +4,4 @@ defaults:
   - datasets: flickr30k
   - tasks: embed
   - _self_
-
 output_path: "data/flickr30k/embeddings/image.parquet"

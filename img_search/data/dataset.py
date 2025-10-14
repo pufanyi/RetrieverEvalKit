@@ -26,5 +26,7 @@ class ImageDataset(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_images(self, batch_size: int = 1) -> Iterator[list[tuple[str, Image.Image | str]]]:
+    def get_images(
+        self, batch_size: int = 1
+    ) -> Iterator[list[tuple[str, Image.Image | str]]]:
         raise NotImplementedError

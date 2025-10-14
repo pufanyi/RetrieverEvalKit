@@ -25,7 +25,9 @@ class InquireDataset(ImageDataset):
     def length(self) -> int:
         return len(self.dataset)
 
-    def get_images(self, batch_size: int = 1) -> Iterator[list[tuple[str, Image.Image | str]]]:
+    def get_images(
+        self, batch_size: int = 1
+    ) -> Iterator[list[tuple[str, Image.Image | str]]]:
         current_list = []
         for sample in self.dataset:
             current_list.append((sample["caption"], sample["image"]))

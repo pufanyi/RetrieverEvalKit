@@ -1,9 +1,10 @@
 from pathlib import Path
 
-import torch
 import hydra
 import pyarrow as pa
 import pyarrow.parquet as pq
+from accelerate import Accelerator
+from omegaconf import DictConfig
 from rich.progress import (
     BarColumn,
     Progress,
@@ -12,10 +13,9 @@ from rich.progress import (
     TimeElapsedColumn,
     TimeRemainingColumn,
 )
-from accelerate import Accelerator
-from omegaconf import DictConfig
 
 from img_search.utils.logging import print_config, setup_logger
+
 from ..data import ImageDataset, get_dataset
 from ..embedding import Encoder, get_encoder
 
@@ -40,35 +40,47 @@ def embed_all(models, datasets, *, tasks_config: DictConfig, accelerator: Accele
     ) as progress:
         main_process_progress = progress if accelerator.is_main_process else None
 
-        models_iter = progress.track(models, description="Processing models") if accelerator.is_main_process else models
+        models_iter = (
+            progress.track(models, description="Processing models")
+            if accelerator.is_main_process
+            else models
+        )
         for model in models_iter:
             model.build()
-            datasets_iter = progress.track(
-                datasets, description=f"Processing datasets for {model.name}"
-            ) if accelerator.is_main_process else datasets
+            datasets_iter = (
+                progress.track(
+                    datasets, description=f"Processing datasets for {model.name}"
+                )
+                if accelerator.is_main_process
+                else datasets
+            )
             for dataset in datasets_iter:
                 dataset.build()
                 data_loader = dataset.get_images(batch_size=tasks_config.batch_size)
                 data_loader = accelerator.prepare(data_loader)
-                
-                task = main_process_progress.add_task(
-                    description=f"Embedding with {model.name} on {dataset.name}",
-                    total=(dataset.length() + tasks_config.batch_size - 1)
-                    // tasks_config.batch_size,
-                    visible=accelerator.is_main_process
-                ) if main_process_progress else None
+
+                task = (
+                    main_process_progress.add_task(
+                        description=f"Embedding with {model.name} on {dataset.name}",
+                        total=(dataset.length() + tasks_config.batch_size - 1)
+                        // tasks_config.batch_size,
+                        visible=accelerator.is_main_process,
+                    )
+                    if main_process_progress
+                    else None
+                )
 
                 for data_with_ids in data_loader:
-                    ids, data = zip(*data_with_ids)
+                    ids, data = zip(*data_with_ids, strict=False)
                     result = model.batch_encode(images=list(data))
-                    
+
                     # Gather results from all processes to the main process for writing
                     all_ids = accelerator.gather_for_metrics(list(ids))
-                    all_embeddings = accelerator.gather_for_metrics(result.cpu())
+                    all_embeddings = accelerator.gather_for_metrics(result).cpu()
 
                     if accelerator.is_main_process:
                         yield model.name, dataset.name, all_ids, all_embeddings
-                    
+
                     if main_process_progress and task is not None:
                         main_process_progress.update(task, advance=1)
 
