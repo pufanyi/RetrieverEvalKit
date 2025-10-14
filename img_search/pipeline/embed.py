@@ -46,7 +46,12 @@ def embed_all(models, datasets, *, tasks_config: DictConfig, accelerator: Accele
             else models
         )
         for model in models_iter:
-            model.build()
+            # Ensure only main process downloads the model first to avoid conflicts
+            if accelerator.is_main_process:
+                model.build()
+            accelerator.wait_for_everyone()  # Wait for main process to finish downloading
+            if not accelerator.is_main_process:
+                model.build()
             datasets_iter = (
                 progress.track(
                     datasets, description=f"Processing datasets for {model.name}"
@@ -55,7 +60,12 @@ def embed_all(models, datasets, *, tasks_config: DictConfig, accelerator: Accele
                 else datasets
             )
             for dataset in datasets_iter:
-                dataset.build()
+                # Ensure only main process downloads the dataset first to avoid conflicts
+                if accelerator.is_main_process:
+                    dataset.build()
+                accelerator.wait_for_everyone()  # Wait for main process to finish downloading
+                if not accelerator.is_main_process:
+                    dataset.build()
                 data_loader = dataset.get_images(batch_size=tasks_config.batch_size)
                 data_loader = accelerator.prepare(data_loader)
 
