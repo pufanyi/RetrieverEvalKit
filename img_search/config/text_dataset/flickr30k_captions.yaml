@@ -1,0 +1,2 @@
+dataset: flickr30k_captions
+path: data/flickr30k/captions.jsonl

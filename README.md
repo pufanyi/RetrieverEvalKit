@@ -12,3 +12,13 @@ accelerate launch --num_processes 8 --mixed_precision bf16 \
   models=jina_v4 \
   tasks.batch_size=1024
 ```
+
+Total inference time: 1:25:58
+
+```sh
+accelerate launch --num_processes 8 --mixed_precision bf16 \
+  -m img_search.pipeline.embed_text \
+  models=jina_v4 \
+  tasks.batch_size=8192
+```
+

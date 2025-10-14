@@ -171,14 +171,15 @@ def embed_all(models, datasets, *, tasks_config: DictConfig, accelerator: Accele
 )
 def main(cfg: DictConfig):
     setup_logger(cfg.logging)
-    print_config(cfg)
-
     # 1. Prepare output file and writer
     output_path = Path(cfg.output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     writer: pq.ParquetWriter | None = None
 
     accelerator = Accelerator()
+    if accelerator.is_main_process:
+        print_config(cfg)
+
     models, datasets = get_models_and_datasets(cfg)
 
     try:

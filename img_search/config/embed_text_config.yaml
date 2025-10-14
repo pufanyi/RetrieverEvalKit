@@ -1,0 +1,7 @@
+defaults:
+  - models: jina_v4
+  - logging: info
+  - text_dataset: flickr30k_captions
+  - tasks: embed
+  - _self_
+output_path: "data/flickr30k/embeddings/text.parquet"
