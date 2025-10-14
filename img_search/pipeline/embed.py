@@ -21,6 +21,7 @@ from ..embedding import Encoder, get_encoder
 def get_models_and_datasets(
     cfg: DictConfig,
 ) -> tuple[list[Encoder], list[ImageDataset]]:
+    print(cfg.models)
     models = [get_encoder(model_cfg) for model_cfg in cfg.models]
     datasets = [get_dataset(dataset_cfg) for dataset_cfg in cfg.datasets]
     return models, datasets
@@ -41,13 +42,15 @@ def embed_all(models, datasets, *, tasks_config: DictConfig):
                 datasets, description=f"Processing datasets for {model.name}"
             ):
                 dataset.build()
-                for ids, data in progress.track(
+                for data_with_ids in progress.track(
                     dataset.get_images(batch_size=tasks_config.batch_size),
                     description=f"Embedding with {model.name} on {dataset.name}",
                     total=(dataset.length() + tasks_config.batch_size - 1)
                     // tasks_config.batch_size,
                 ):
-                    result = model.encode(image=data)
+                    # import pdb; pdb.set_trace()
+                    ids, data = zip(*data_with_ids)
+                    result = model.encode(image=list(data))
                     yield model.name, dataset.name, ids, result
 
 

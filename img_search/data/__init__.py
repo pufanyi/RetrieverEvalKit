@@ -3,12 +3,14 @@ from typing import Any
 from omegaconf import DictConfig, OmegaConf
 
 from .dataset import ImageDataset
+from .flickr30k import Flickr30kDataset
 from .inquire import InquireDataset
 
-__all__ = ["ImageDataset", "InquireDataset"]
+__all__ = ["ImageDataset", "InquireDataset", "Flickr30kDataset"]
 
 DATASETS = {
     "inquire": InquireDataset,
+    "flickr30k": Flickr30kDataset,
 }
 
 

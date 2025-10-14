@@ -60,7 +60,8 @@ class JinaV4Encoder(Encoder):
                 prepared.append(image)
             else:
                 raise TypeError(
-                    "Image inputs must be PIL.Image.Image or str (path or URL)."
+                    "Image inputs must be PIL.Image.Image or str (path or URL), "
+                    f"got {type(image)}"
                 )
         return prepared
 
