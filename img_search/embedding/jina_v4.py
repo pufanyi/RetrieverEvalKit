@@ -11,7 +11,7 @@ from .encoder import Encoder
 
 
 class JinaV4Encoder(Encoder):
-    """SentenceTransformer-backed encoder with optional Accelerate data parallelism."""
+    """SentenceTransformer-backed encoder with Accelerate data parallelism support."""
 
     def __init__(
         self,
@@ -21,6 +21,7 @@ class JinaV4Encoder(Encoder):
         normalize_embeddings: bool = True,
         default_task: str | None = "retrieval",
         model_kwargs: dict[str, object] | None = None,
+        use_accelerate: bool = True,
     ):
         super().__init__("JinaV4")
         self.model_name = model_name
@@ -29,6 +30,7 @@ class JinaV4Encoder(Encoder):
         self._normalize_embeddings = normalize_embeddings
         self._default_task = default_task
         self._model_kwargs = dict(model_kwargs) if model_kwargs else {}
+        self._use_accelerate = use_accelerate
         self._model: SentenceTransformer | None = None
         self._batch_size = batch_size
 

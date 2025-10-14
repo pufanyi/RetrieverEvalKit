@@ -40,11 +40,13 @@ def embed_all(models, datasets, *, tasks_config: DictConfig, accelerator: Accele
     ) as progress:
         main_process_progress = progress if accelerator.is_main_process else None
 
-        for model in progress.track(models, description="Processing models", disable=not accelerator.is_main_process):
+        models_iter = progress.track(models, description="Processing models") if accelerator.is_main_process else models
+        for model in models_iter:
             model.build()
-            for dataset in progress.track(
-                datasets, description=f"Processing datasets for {model.name}", disable=not accelerator.is_main_process
-            ):
+            datasets_iter = progress.track(
+                datasets, description=f"Processing datasets for {model.name}"
+            ) if accelerator.is_main_process else datasets
+            for dataset in datasets_iter:
                 dataset.build()
                 data_loader = dataset.get_images(batch_size=tasks_config.batch_size)
                 data_loader = accelerator.prepare(data_loader)
