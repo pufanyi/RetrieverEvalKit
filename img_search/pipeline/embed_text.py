@@ -157,7 +157,10 @@ def safe_build_dataset(
                 )
                 if attempt == max_retries - 1:
                     logger.error(
-                        "Worker process %d failed to build dataset %s after %d attempts",
+                        (
+                            "Worker process %d failed to build dataset %s after %d "
+                            "attempts"
+                        ),
                         accelerator.process_index,
                         dataset.name,
                         max_retries,

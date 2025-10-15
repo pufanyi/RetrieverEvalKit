@@ -40,11 +40,13 @@ def safe_build_model(
                 break
             except Exception as e:
                 logger.warning(
-                    f"Main process failed to build model {model.name} on attempt {attempt + 1}: {e}"
+                    f"Main process failed to build model {model.name} on attempt "
+                    f"{attempt + 1}: {e}"
                 )
                 if attempt == max_retries - 1:
                     logger.error(
-                        f"Main process failed to build model {model.name} after {max_retries} attempts"
+                        f"Main process failed to build model {model.name} after "
+                        f"{max_retries} attempts"
                     )
                     raise
                 time.sleep(2**attempt)  # Exponential backoff
@@ -57,20 +59,24 @@ def safe_build_model(
         for attempt in range(max_retries):
             try:
                 logger.info(
-                    f"Worker process {accelerator.process_index} building model {model.name} (attempt {attempt + 1})"
+                    f"Worker process {accelerator.process_index} building model "
+                    f"{model.name} (attempt {attempt + 1})"
                 )
                 model.build()
                 logger.info(
-                    f"Worker process {accelerator.process_index} successfully built model {model.name}"
+                    f"Worker process {accelerator.process_index} successfully built "
+                    f"model {model.name}"
                 )
                 break
             except Exception as e:
                 logger.warning(
-                    f"Worker process {accelerator.process_index} failed to build model {model.name} on attempt {attempt + 1}: {e}"
+                    f"Worker process {accelerator.process_index} failed to build model "
+                    f"{model.name} on attempt {attempt + 1}: {e}"
                 )
                 if attempt == max_retries - 1:
                     logger.error(
-                        f"Worker process {accelerator.process_index} failed to build model {model.name} after {max_retries} attempts"
+                        f"Worker process {accelerator.process_index} failed to build "
+                        f"model {model.name} after {max_retries} attempts"
                     )
                     raise
                 time.sleep(1 + attempt)  # Staggered retry
@@ -87,18 +93,21 @@ def safe_build_dataset(
         for attempt in range(max_retries):
             try:
                 logger.info(
-                    f"Main process building dataset {dataset.name} (attempt {attempt + 1})"
+                    f"Main process building dataset {dataset.name} "
+                    f"(attempt {attempt + 1})"
                 )
                 dataset.build()
                 logger.info(f"Main process successfully built dataset {dataset.name}")
                 break
             except Exception as e:
                 logger.warning(
-                    f"Main process failed to build dataset {dataset.name} on attempt {attempt + 1}: {e}"
+                    f"Main process failed to build dataset {dataset.name} on attempt "
+                    f"{attempt + 1}: {e}"
                 )
                 if attempt == max_retries - 1:
                     logger.error(
-                        f"Main process failed to build dataset {dataset.name} after {max_retries} attempts"
+                        f"Main process failed to build dataset {dataset.name} after "
+                        f"{max_retries} attempts"
                     )
                     raise
                 time.sleep(2**attempt)  # Exponential backoff
@@ -111,20 +120,24 @@ def safe_build_dataset(
         for attempt in range(max_retries):
             try:
                 logger.info(
-                    f"Worker process {accelerator.process_index} building dataset {dataset.name} (attempt {attempt + 1})"
+                    f"Worker process {accelerator.process_index} building dataset "
+                    f"{dataset.name} (attempt {attempt + 1})"
                 )
                 dataset.build()
                 logger.info(
-                    f"Worker process {accelerator.process_index} successfully built dataset {dataset.name}"
+                    f"Worker process {accelerator.process_index} successfully built "
+                    f"dataset {dataset.name}"
                 )
                 break
             except Exception as e:
                 logger.warning(
-                    f"Worker process {accelerator.process_index} failed to build dataset {dataset.name} on attempt {attempt + 1}: {e}"
+                    f"Worker process {accelerator.process_index} failed to build "
+                    f"dataset {dataset.name} on attempt {attempt + 1}: {e}"
                 )
                 if attempt == max_retries - 1:
                     logger.error(
-                        f"Worker process {accelerator.process_index} failed to build dataset {dataset.name} after {max_retries} attempts"
+                        f"Worker process {accelerator.process_index} failed to build "
+                        f"dataset {dataset.name} after {max_retries} attempts"
                     )
                     raise
                 time.sleep(1 + attempt)  # Staggered retry
