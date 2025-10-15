@@ -1,5 +1,5 @@
 - model: jina_v4
   model_name: jinaai/jina-embeddings-v4
-  batch_size: 64
+  batch_size: 4096
   kwargs:
     use_accelerate: true

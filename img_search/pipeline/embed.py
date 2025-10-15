@@ -153,7 +153,7 @@ def embed_all(models, datasets, *, tasks_config: DictConfig, accelerator: Accele
 
                 for data_with_ids in data_loader:
                     ids, data = zip(*data_with_ids, strict=False)
-                    result = model.batch_encode(images=list(data))
+                    result = model.batch_encode(images=list(data), batch_size=tasks_config.batch_size)
 
                     # Gather results from all processes to the main process for writing
                     all_ids = accelerator.gather_for_metrics(list(ids))

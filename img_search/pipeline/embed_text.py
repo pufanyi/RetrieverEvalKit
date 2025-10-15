@@ -200,7 +200,7 @@ def embed_all(
 
             for batch in dataset.get_texts(batch_size=tasks_config.batch_size):
                 indices, texts = zip(*batch, strict=False)
-                embeddings = model.batch_encode(texts=list(texts))
+                embeddings = model.batch_encode(texts=list(texts), batch_size=tasks_config.batch_size)
                 embeddings_tensor = _normalize_embeddings(embeddings)
                 embeddings_tensor = embeddings_tensor.to(accelerator.device)
 
