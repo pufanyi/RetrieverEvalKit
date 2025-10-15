@@ -1,0 +1,6 @@
+- model: siglip_vllm
+  model_name: google/siglip-so400m-patch14-384
+  batch_size: 128
+  kwargs:
+    dtype: float16
+

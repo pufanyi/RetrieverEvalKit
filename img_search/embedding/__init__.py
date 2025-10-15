@@ -6,8 +6,9 @@ from .encoder import Encoder
 from .jina_v4 import JinaV4Encoder
 from .jina_v4_vllm import JinaV4VLLMEncoder
 from .siglip2 import Siglip2Encoder
+from .siglip_vllm import SiglipVLLMEncoder
 
-__all__ = ["Siglip2Encoder", "JinaV4Encoder", "JinaV4VLLMEncoder"]
+__all__ = ["Siglip2Encoder", "JinaV4Encoder", "JinaV4VLLMEncoder", "SiglipVLLMEncoder"]
 
 
 def _collect_kwargs(cfg: DictConfig) -> dict[str, Any]:
@@ -31,6 +32,8 @@ def get_encoder(cfg: DictConfig) -> Encoder:
     kwargs = _collect_kwargs(cfg)
     if model == "siglip2":
         return Siglip2Encoder(**kwargs)
+    elif model == "siglip_vllm":
+        return SiglipVLLMEncoder(**kwargs)
     elif model == "jina_v4":
         return JinaV4Encoder(**kwargs)
     elif model == "jina_v4_vllm":
