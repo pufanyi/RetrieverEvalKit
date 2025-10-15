@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 import hydra
 import pyarrow as pa
@@ -26,14 +26,20 @@ from ..data import CaptionRecord, TextDataset, get_text_dataset
 from ..embedding import Encoder, get_encoder
 
 
-def safe_build_model(model: Encoder, accelerator: Accelerator, max_retries: int = 3) -> None:
+def safe_build_model(
+    model: Encoder, accelerator: Accelerator, max_retries: int = 3
+) -> None:
     """Safely build model with synchronization and retry logic."""
     logger = logging.getLogger(__name__)
 
     if accelerator.is_main_process:
         for attempt in range(max_retries):
             try:
-                logger.info("Main process building model %s (attempt %d)", model.name, attempt + 1)
+                logger.info(
+                    "Main process building model %s (attempt %d)",
+                    model.name,
+                    attempt + 1,
+                )
                 model.build()
                 logger.info("Main process successfully built model %s", model.name)
                 break
@@ -51,7 +57,7 @@ def safe_build_model(model: Encoder, accelerator: Accelerator, max_retries: int 
                         max_retries,
                     )
                     raise
-                time.sleep(2 ** attempt)
+                time.sleep(2**attempt)
 
     accelerator.wait_for_everyone()
 
@@ -90,14 +96,20 @@ def safe_build_model(model: Encoder, accelerator: Accelerator, max_retries: int 
                 time.sleep(1 + attempt)
 
 
-def safe_build_dataset(dataset: TextDataset, accelerator: Accelerator, max_retries: int = 3) -> None:
+def safe_build_dataset(
+    dataset: TextDataset, accelerator: Accelerator, max_retries: int = 3
+) -> None:
     """Safely build text dataset with synchronization and retry logic."""
     logger = logging.getLogger(__name__)
 
     if accelerator.is_main_process:
         for attempt in range(max_retries):
             try:
-                logger.info("Main process building dataset %s (attempt %d)", dataset.name, attempt + 1)
+                logger.info(
+                    "Main process building dataset %s (attempt %d)",
+                    dataset.name,
+                    attempt + 1,
+                )
                 dataset.build()
                 logger.info("Main process successfully built dataset %s", dataset.name)
                 break
@@ -115,7 +127,7 @@ def safe_build_dataset(dataset: TextDataset, accelerator: Accelerator, max_retri
                         max_retries,
                     )
                     raise
-                time.sleep(2 ** attempt)
+                time.sleep(2**attempt)
 
     accelerator.wait_for_everyone()
 
@@ -154,10 +166,14 @@ def safe_build_dataset(dataset: TextDataset, accelerator: Accelerator, max_retri
                 time.sleep(1 + attempt)
 
 
-def _normalize_embeddings(embeddings: torch.Tensor | Iterable[torch.Tensor]) -> torch.Tensor:
+def _normalize_embeddings(
+    embeddings: torch.Tensor | Iterable[torch.Tensor],
+) -> torch.Tensor:
     if isinstance(embeddings, torch.Tensor):
         return embeddings
-    tensors = [tensor.detach() if tensor.requires_grad else tensor for tensor in embeddings]
+    tensors = [
+        tensor.detach() if tensor.requires_grad else tensor for tensor in embeddings
+    ]
     return torch.stack(tensors, dim=0)
 
 
@@ -200,18 +216,24 @@ def embed_all(
 
             for batch in dataset.get_texts(batch_size=tasks_config.batch_size):
                 indices, texts = zip(*batch, strict=False)
-                embeddings = model.batch_encode(texts=list(texts), batch_size=tasks_config.batch_size)
+                embeddings = model.batch_encode(
+                    texts=list(texts), batch_size=tasks_config.batch_size
+                )
                 embeddings_tensor = _normalize_embeddings(embeddings)
                 embeddings_tensor = embeddings_tensor.to(accelerator.device)
 
-                index_tensor = torch.tensor(indices, device=accelerator.device, dtype=torch.long)
+                index_tensor = torch.tensor(
+                    indices, device=accelerator.device, dtype=torch.long
+                )
 
                 all_indices = accelerator.gather_for_metrics(index_tensor)
                 all_embeddings = accelerator.gather_for_metrics(embeddings_tensor)
 
                 if accelerator.is_main_process:
                     gathered_indices = all_indices.tolist()
-                    records: list[CaptionRecord] = [dataset.get_record(idx) for idx in gathered_indices]
+                    records: list[CaptionRecord] = [
+                        dataset.get_record(idx) for idx in gathered_indices
+                    ]
                     yield model.name, dataset.name, records, all_embeddings.cpu()
 
                 if main_process_progress and task is not None:

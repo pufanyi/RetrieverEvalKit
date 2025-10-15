@@ -61,4 +61,3 @@ class TextDataset(ABC):
     @abstractmethod
     def get_record(self, index: int):
         raise NotImplementedError
-

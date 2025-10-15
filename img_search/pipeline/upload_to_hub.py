@@ -4,7 +4,7 @@ import argparse
 import logging
 from pathlib import Path
 
-from datasets import DatasetDict, load_dataset
+from datasets import load_dataset
 from huggingface_hub import HfApi
 
 
@@ -47,7 +47,9 @@ def get_args() -> argparse.Namespace:
 
 def main() -> None:
     """Main function to load data and upload to Hugging Face Hub."""
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
     args = get_args()
 
     if not args.image_parquet.exists():
@@ -59,11 +61,17 @@ def main() -> None:
 
     logging.info("Creating repository %s on Hugging Face Hub...", args.repo_id)
     api = HfApi(token=args.token)
-    api.create_repo(repo_id=args.repo_id, repo_type="dataset", exist_ok=True, private=args.private)
+    api.create_repo(
+        repo_id=args.repo_id, repo_type="dataset", exist_ok=True, private=args.private
+    )
 
     logging.info("Loading datasets from Parquet files...")
-    image_ds = load_dataset("parquet", data_files={"train": str(args.image_parquet)})["train"]
-    text_ds = load_dataset("parquet", data_files={"train": str(args.text_parquet)})["train"]
+    image_ds = load_dataset("parquet", data_files={"train": str(args.image_parquet)})[
+        "train"
+    ]
+    text_ds = load_dataset("parquet", data_files={"train": str(args.text_parquet)})[
+        "train"
+    ]
 
     image_ds.push_to_hub(repo_id=args.repo_id, token=args.token, config_name="images")
     text_ds.push_to_hub(repo_id=args.repo_id, token=args.token, config_name="texts")

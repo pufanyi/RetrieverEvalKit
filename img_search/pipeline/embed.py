@@ -1,6 +1,6 @@
-from pathlib import Path
-import time
 import logging
+import time
+from pathlib import Path
 
 import hydra
 import pyarrow as pa
@@ -22,78 +22,110 @@ from ..data import ImageDataset, get_dataset
 from ..embedding import Encoder, get_encoder
 
 
-def safe_build_model(model: Encoder, accelerator: Accelerator, max_retries: int = 3) -> None:
+def safe_build_model(
+    model: Encoder, accelerator: Accelerator, max_retries: int = 3
+) -> None:
     """Safely build model with synchronization and retry logic."""
     logger = logging.getLogger(__name__)
-    
+
     if accelerator.is_main_process:
         # Main process downloads the model
         for attempt in range(max_retries):
             try:
-                logger.info(f"Main process building model {model.name} (attempt {attempt + 1})")
+                logger.info(
+                    f"Main process building model {model.name} (attempt {attempt + 1})"
+                )
                 model.build()
                 logger.info(f"Main process successfully built model {model.name}")
                 break
             except Exception as e:
-                logger.warning(f"Main process failed to build model {model.name} on attempt {attempt + 1}: {e}")
+                logger.warning(
+                    f"Main process failed to build model {model.name} on attempt {attempt + 1}: {e}"
+                )
                 if attempt == max_retries - 1:
-                    logger.error(f"Main process failed to build model {model.name} after {max_retries} attempts")
+                    logger.error(
+                        f"Main process failed to build model {model.name} after {max_retries} attempts"
+                    )
                     raise
-                time.sleep(2 ** attempt)  # Exponential backoff
-    
+                time.sleep(2**attempt)  # Exponential backoff
+
     # Synchronize all processes
     accelerator.wait_for_everyone()
-    
+
     if not accelerator.is_main_process:
         # Other processes load from cache
         for attempt in range(max_retries):
             try:
-                logger.info(f"Worker process {accelerator.process_index} building model {model.name} (attempt {attempt + 1})")
+                logger.info(
+                    f"Worker process {accelerator.process_index} building model {model.name} (attempt {attempt + 1})"
+                )
                 model.build()
-                logger.info(f"Worker process {accelerator.process_index} successfully built model {model.name}")
+                logger.info(
+                    f"Worker process {accelerator.process_index} successfully built model {model.name}"
+                )
                 break
             except Exception as e:
-                logger.warning(f"Worker process {accelerator.process_index} failed to build model {model.name} on attempt {attempt + 1}: {e}")
+                logger.warning(
+                    f"Worker process {accelerator.process_index} failed to build model {model.name} on attempt {attempt + 1}: {e}"
+                )
                 if attempt == max_retries - 1:
-                    logger.error(f"Worker process {accelerator.process_index} failed to build model {model.name} after {max_retries} attempts")
+                    logger.error(
+                        f"Worker process {accelerator.process_index} failed to build model {model.name} after {max_retries} attempts"
+                    )
                     raise
                 time.sleep(1 + attempt)  # Staggered retry
 
 
-def safe_build_dataset(dataset: ImageDataset, accelerator: Accelerator, max_retries: int = 3) -> None:
+def safe_build_dataset(
+    dataset: ImageDataset, accelerator: Accelerator, max_retries: int = 3
+) -> None:
     """Safely build dataset with synchronization and retry logic."""
     logger = logging.getLogger(__name__)
-    
+
     if accelerator.is_main_process:
         # Main process downloads the dataset
         for attempt in range(max_retries):
             try:
-                logger.info(f"Main process building dataset {dataset.name} (attempt {attempt + 1})")
+                logger.info(
+                    f"Main process building dataset {dataset.name} (attempt {attempt + 1})"
+                )
                 dataset.build()
                 logger.info(f"Main process successfully built dataset {dataset.name}")
                 break
             except Exception as e:
-                logger.warning(f"Main process failed to build dataset {dataset.name} on attempt {attempt + 1}: {e}")
+                logger.warning(
+                    f"Main process failed to build dataset {dataset.name} on attempt {attempt + 1}: {e}"
+                )
                 if attempt == max_retries - 1:
-                    logger.error(f"Main process failed to build dataset {dataset.name} after {max_retries} attempts")
+                    logger.error(
+                        f"Main process failed to build dataset {dataset.name} after {max_retries} attempts"
+                    )
                     raise
-                time.sleep(2 ** attempt)  # Exponential backoff
-    
+                time.sleep(2**attempt)  # Exponential backoff
+
     # Synchronize all processes
     accelerator.wait_for_everyone()
-    
+
     if not accelerator.is_main_process:
         # Other processes load from cache
         for attempt in range(max_retries):
             try:
-                logger.info(f"Worker process {accelerator.process_index} building dataset {dataset.name} (attempt {attempt + 1})")
+                logger.info(
+                    f"Worker process {accelerator.process_index} building dataset {dataset.name} (attempt {attempt + 1})"
+                )
                 dataset.build()
-                logger.info(f"Worker process {accelerator.process_index} successfully built dataset {dataset.name}")
+                logger.info(
+                    f"Worker process {accelerator.process_index} successfully built dataset {dataset.name}"
+                )
                 break
             except Exception as e:
-                logger.warning(f"Worker process {accelerator.process_index} failed to build dataset {dataset.name} on attempt {attempt + 1}: {e}")
+                logger.warning(
+                    f"Worker process {accelerator.process_index} failed to build dataset {dataset.name} on attempt {attempt + 1}: {e}"
+                )
                 if attempt == max_retries - 1:
-                    logger.error(f"Worker process {accelerator.process_index} failed to build dataset {dataset.name} after {max_retries} attempts")
+                    logger.error(
+                        f"Worker process {accelerator.process_index} failed to build dataset {dataset.name} after {max_retries} attempts"
+                    )
                     raise
                 time.sleep(1 + attempt)  # Staggered retry
 
@@ -126,7 +158,7 @@ def embed_all(models, datasets, *, tasks_config: DictConfig, accelerator: Accele
         for model in models_iter:
             # Use safe model building with retry logic
             safe_build_model(model, accelerator)
-            
+
             datasets_iter = (
                 progress.track(
                     datasets, description=f"Processing datasets for {model.name}"
@@ -153,7 +185,9 @@ def embed_all(models, datasets, *, tasks_config: DictConfig, accelerator: Accele
 
                 for data_with_ids in data_loader:
                     ids, data = zip(*data_with_ids, strict=False)
-                    result = model.batch_encode(images=list(data), batch_size=tasks_config.batch_size)
+                    result = model.batch_encode(
+                        images=list(data), batch_size=tasks_config.batch_size
+                    )
 
                     # Gather results from all processes to the main process for writing
                     all_ids = accelerator.gather_for_metrics(list(ids))

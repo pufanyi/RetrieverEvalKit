@@ -21,4 +21,3 @@ accelerate launch --num_processes 8 --mixed_precision bf16 \
   models=jina_v4 \
   tasks.batch_size=1024
 ```
-
