@@ -194,7 +194,7 @@ class ScannSearchIndex:
         if search_neighbors != self._search_k:
             self._build_searcher(search_neighbors=search_neighbors)
 
-        distances, indices = self._searcher.search_batched(
+        indices, distances = self._searcher.search_batched(
             query_matrix, final_num_neighbors=search_neighbors
         )
         results: list[list[dict[str, float | str]]] = []
