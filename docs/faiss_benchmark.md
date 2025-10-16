@@ -57,7 +57,10 @@ Update the `load_from_disk` path (or switch to a Hub dataset name) in
 `image_dataset/local_demo.yaml` and `query_dataset/local_demo.yaml` to match your
 artifacts. The evaluation config already lists three FAISS methods (flat,
 IVF-Flat, HNSW) and will write the consolidated metrics to
-`outputs/faiss_benchmark.csv`.
+`outputs/faiss_benchmark.csv`. When GPU support is available, the harness will
+automatically benchmark both CPU and GPU variants of each FAISS method so you
+can compare throughput without changing the configuration. Environments without
+CUDA simply skip the GPU rows while keeping the CPU measurements intact.
 
 Looking for a ready-made corpus? The
 [`pufanyi/flickr30k-jina-embeddings-v4`](https://huggingface.co/datasets/pufanyi/flickr30k-jina-embeddings-v4)
@@ -102,4 +105,7 @@ uv run python -m img_search.search.evaluate \
 ```
 
 The script prints a Rich table summarising timing, accuracy, and recall metrics
-per method and optionally saves the raw rows as CSV for downstream analysis.
+per method and optionally saves the raw rows as CSV for downstream analysis. A
+brute-force baseline now rounds out the table by computing exact similarity
+scores with NumPy. The baseline is reported once per metric used in the FAISS
+configs so you can see the recall ceiling alongside approximate index results.

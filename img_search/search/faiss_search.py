@@ -294,9 +294,7 @@ def benchmark_methods(
 
     results: list[dict[str, Any]] = []
 
-    recall_points = sorted(
-        {int(point) for point in recall_points or [] if int(point) > 0}
-    )
+    recall_points = _normalise_recall_points(recall_points)
 
     configs_list = list(method_configs)
     method_task: TaskID | None = None
@@ -351,33 +349,9 @@ def benchmark_methods(
         else:
             per_query_results = hits  # type: ignore[assignment]
 
-        accuracy = None
-        recall_totals: dict[int, float] = dict.fromkeys(recall_points, 0.0)
-        recall_counts: dict[int, int] = dict.fromkeys(recall_points, 0)
-        if ground_truth is not None:
-            if len(ground_truth) != len(per_query_results):
-                raise ValueError("ground_truth length must match number of queries")
-            correct = 0
-            for expected, retrieved in zip(
-                ground_truth, per_query_results, strict=True
-            ):
-                expected_ids = _as_label_set(expected)
-                if any(hit["id"] in expected_ids for hit in retrieved):
-                    correct += 1
-                if recall_points:
-                    if not expected_ids:
-                        continue
-                    relevant_count = len(expected_ids)
-                    retrieved_ids = [hit["id"] for hit in retrieved]
-                    for point in recall_points:
-                        if point > len(retrieved_ids):
-                            subset = retrieved_ids
-                        else:
-                            subset = retrieved_ids[:point]
-                        hits = len(expected_ids.intersection(subset))
-                        recall_totals[point] += hits / relevant_count
-                        recall_counts[point] += 1
-            accuracy = correct / len(per_query_results)
+        accuracy, recall_scores = _score_hits(
+            per_query_results, ground_truth, recall_points
+        )
 
         row: dict[str, Any] = {
             "method": index_config.method,
@@ -390,10 +364,7 @@ def benchmark_methods(
             "ntotal": index.ntotal,
         }
         for point in recall_points:
-            if recall_counts[point] == 0:
-                row[f"recall@{point}"] = None
-            else:
-                row[f"recall@{point}"] = recall_totals[point] / recall_counts[point]
+            row[f"recall@{point}"] = recall_scores.get(point)
 
         results.append(row)
 
@@ -410,6 +381,78 @@ def benchmark_methods(
     return results
 
 
+def benchmark_bruteforce(
+    embeddings: Iterable[np.ndarray | Sequence[float]],
+    queries: Iterable[np.ndarray | Sequence[float]],
+    *,
+    ids: Sequence[str] | None = None,
+    metrics: Sequence[str] | None = None,
+    top_k: int = 5,
+    ground_truth: Sequence[Sequence[str] | str] | None = None,
+    recall_points: Sequence[int] | None = None,
+) -> list[dict[str, Any]]:
+    """Compute brute-force search baselines for the requested metrics."""
+
+    embeddings_matrix = _as_matrix(embeddings)
+    query_matrix = _as_matrix(queries, dim=embeddings_matrix.shape[1])
+    if ids is None:
+        ids = [str(idx) for idx in range(len(embeddings_matrix))]
+    if len(ids) != len(embeddings_matrix):
+        raise ValueError("ids length must match embeddings length")
+
+    recall_points = _normalise_recall_points(recall_points)
+    metrics = list(
+        dict.fromkeys(str(metric).lower() for metric in (metrics or ["l2"]))
+    )
+    rows: list[dict[str, Any]] = []
+
+    actual_k = min(int(top_k), embeddings_matrix.shape[0])
+    if actual_k <= 0:
+        raise ValueError("top_k must be a positive integer")
+
+    for metric in metrics:
+        if metric not in {"l2", "ip", "cosine"}:
+            raise ValueError(f"Unsupported brute-force metric: {metric}")
+
+        start = time.perf_counter()
+        if metric == "l2":
+            scores = _pairwise_l2(query_matrix, embeddings_matrix)
+            indices, values = _top_k_indices(scores, actual_k, largest=False)
+        else:
+            scores = _pairwise_ip(
+                query_matrix,
+                embeddings_matrix,
+                normalise=metric == "cosine",
+            )
+            indices, values = _top_k_indices(scores, actual_k, largest=True)
+        search_time = time.perf_counter() - start
+
+        hits: list[list[dict[str, Any]]] = []
+        for row_indices, row_scores in zip(indices, values, strict=True):
+            row_hits: list[dict[str, Any]] = []
+            for idx, score in zip(row_indices, row_scores, strict=True):
+                row_hits.append({"id": ids[int(idx)], "distance": float(score)})
+            hits.append(row_hits)
+
+        accuracy, recall_scores = _score_hits(hits, ground_truth, recall_points)
+
+        row: dict[str, Any] = {
+            "method": "bruteforce",
+            "metric": metric,
+            "use_gpu": False,
+            "index_time": 0.0,
+            "search_time": search_time,
+            "avg_query_time": search_time / len(query_matrix),
+            "accuracy": accuracy,
+            "ntotal": len(embeddings_matrix),
+        }
+        for point in recall_points:
+            row[f"recall@{point}"] = recall_scores.get(point)
+        rows.append(row)
+
+    return rows
+
+
 def _as_label_set(values: Sequence[str] | str | None) -> set[str]:
     if values is None:
         return set()
@@ -417,6 +460,93 @@ def _as_label_set(values: Sequence[str] | str | None) -> set[str]:
         return {values}
     result = {str(item) for item in values}
     return result
+
+
+def _normalise_recall_points(points: Sequence[int] | None) -> list[int]:
+    return sorted({int(point) for point in points or [] if int(point) > 0})
+
+
+def _score_hits(
+    per_query_results: Sequence[Sequence[Mapping[str, Any]]],
+    ground_truth: Sequence[Sequence[str] | str] | None,
+    recall_points: Sequence[int],
+) -> tuple[float | None, dict[int, float | None]]:
+    recall_scores: dict[int, float | None] = dict.fromkeys(recall_points, None)
+    if ground_truth is None:
+        return None, recall_scores
+    if len(ground_truth) != len(per_query_results):
+        raise ValueError("ground_truth length must match number of queries")
+
+    correct = 0
+    totals = dict.fromkeys(recall_points, 0.0)
+    counts = dict.fromkeys(recall_points, 0)
+
+    for expected, retrieved in zip(ground_truth, per_query_results, strict=True):
+        expected_ids = _as_label_set(expected)
+        if any(hit["id"] in expected_ids for hit in retrieved):
+            correct += 1
+        if not recall_points or not expected_ids:
+            continue
+        relevant_count = len(expected_ids)
+        retrieved_ids = [hit["id"] for hit in retrieved]
+        for point in recall_points:
+            subset = retrieved_ids[: min(point, len(retrieved_ids))]
+            hits = len(expected_ids.intersection(subset))
+            totals[point] += hits / relevant_count
+            counts[point] += 1
+
+    accuracy = correct / len(per_query_results)
+    for point in recall_points:
+        if counts[point] == 0:
+            recall_scores[point] = None
+        else:
+            recall_scores[point] = totals[point] / counts[point]
+    return accuracy, recall_scores
+
+
+def _pairwise_l2(queries: np.ndarray, embeddings: np.ndarray) -> np.ndarray:
+    query_norms = np.sum(np.square(queries), axis=1, keepdims=True)
+    embed_norms = np.sum(np.square(embeddings), axis=1, keepdims=True).T
+    scores = query_norms + embed_norms - 2 * queries @ embeddings.T
+    np.maximum(scores, 0.0, out=scores)
+    return scores
+
+
+def _pairwise_ip(
+    queries: np.ndarray, embeddings: np.ndarray, *, normalise: bool = False
+) -> np.ndarray:
+    if normalise:
+        queries = _normalise_rows(queries)
+        embeddings = _normalise_rows(embeddings)
+    return queries @ embeddings.T
+
+
+def _normalise_rows(matrix: np.ndarray) -> np.ndarray:
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    return matrix / norms
+
+
+def _top_k_indices(
+    scores: np.ndarray, k: int, *, largest: bool
+) -> tuple[np.ndarray, np.ndarray]:
+    if k >= scores.shape[1]:
+        order = np.argsort(-scores if largest else scores, axis=1)
+        sorted_scores = np.take_along_axis(scores, order, axis=1)
+        return order[:, :k], sorted_scores[:, :k]
+
+    if largest:
+        partition = np.argpartition(-scores, kth=k - 1, axis=1)[:, :k]
+        partial_scores = np.take_along_axis(scores, partition, axis=1)
+        order = np.argsort(-partial_scores, axis=1)
+    else:
+        partition = np.argpartition(scores, kth=k - 1, axis=1)[:, :k]
+        partial_scores = np.take_along_axis(scores, partition, axis=1)
+        order = np.argsort(partial_scores, axis=1)
+
+    sorted_indices = np.take_along_axis(partition, order, axis=1)
+    sorted_scores = np.take_along_axis(partial_scores, order, axis=1)
+    return sorted_indices, sorted_scores
 
 
 def _metric_type(metric: str) -> int:
@@ -454,4 +584,9 @@ def _as_matrix(
     return array
 
 
-__all__ = ["FaissIndexConfig", "FaissSearchIndex", "benchmark_methods"]
+__all__ = [
+    "FaissIndexConfig",
+    "FaissSearchIndex",
+    "benchmark_methods",
+    "benchmark_bruteforce",
+]

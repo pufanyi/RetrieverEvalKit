@@ -29,7 +29,11 @@ from img_search.data.embeddings import (
     extract_relevance,
     load_embedding_dataset,
 )
-from img_search.search.faiss_search import FaissIndexConfig, benchmark_methods
+from img_search.search.faiss_search import (
+    FaissIndexConfig,
+    benchmark_bruteforce,
+    benchmark_methods,
+)
 
 
 @dataclass(slots=True)
@@ -170,9 +174,23 @@ def run_search_evaluation(config: SearchEvalConfig) -> list[dict[str, Any]]:
     method_configs: list[FaissIndexConfig | dict[str, Any]] = []
     for method in config.evaluation.methods:
         override = dict(method)
-        if config.evaluation.use_gpu is not None:
-            override["use_gpu"] = config.evaluation.use_gpu
-        method_configs.append(override)
+        override.pop("use_gpu", None)
+        if config.evaluation.use_gpu is None:
+            method_configs.append({**override, "use_gpu": False})
+            try:
+                FaissIndexConfig.from_mapping({**override, "use_gpu": True})
+            except RuntimeError as exc:
+                logger.warning(
+                    "Skipping GPU variant for method '%s': %s",
+                    override.get("method", "unknown"),
+                    exc,
+                )
+            else:
+                method_configs.append({**override, "use_gpu": True})
+        else:
+            method_configs.append(
+                {**override, "use_gpu": bool(config.evaluation.use_gpu)}
+            )
 
     top_k = _ensure_top_k(config.evaluation)
     logger.info(
@@ -213,6 +231,27 @@ def run_search_evaluation(config: SearchEvalConfig) -> list[dict[str, Any]]:
         "Benchmark complete; collected {} result rows",
         len(results),
     )
+
+    metrics = sorted(
+        {
+            cfg.metric
+            if isinstance(cfg, FaissIndexConfig)
+            else str(cfg.get("metric", "l2")).lower()
+            for cfg in method_configs
+        }
+    )
+    brute_rows = benchmark_bruteforce(
+        image_vectors,
+        query_vectors,
+        ids=image_ids,
+        metrics=metrics,
+        top_k=top_k,
+        ground_truth=ground_truth,
+        recall_points=config.evaluation.recall_at,
+    )
+    if brute_rows:
+        logger.info("Appended %s brute-force baseline result(s)", len(brute_rows))
+    results.extend(brute_rows)
 
     for row in results:
         row.setdefault("num_queries", len(query_ids))
