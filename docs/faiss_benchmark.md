@@ -74,13 +74,6 @@ uv run python -m img_search.search.evaluate \
   query_dataset=flickr30k_jina
 ```
 
-```bash
-uv run python -m img_search.search.evaluate \
-  image_dataset=flickr30k_jina \
-  query_dataset=flickr30k_jina \
-  evaluation.use_gpu=true
-```
-
 The image split stores one vector per Flickr30k photo under the `id` column,
 while the caption split includes five caption embeddings per image and uses the
 `image_id` column for relevance labels.
