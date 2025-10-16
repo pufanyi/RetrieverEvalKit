@@ -23,6 +23,7 @@ class EmbeddingDatasetSpec:
     id_column: str = "id"
     embedding_column: str = "embedding"
     metadata_columns: list[str] = field(default_factory=list)
+    read_batch_size: int | None = None
 
     def __post_init__(self) -> None:
         if not self.dataset_name and not self.load_from_disk:
@@ -78,6 +79,7 @@ def extract_embeddings(
     *,
     id_column: str,
     embedding_column: str,
+    batch_size: int | None = None,
 ) -> tuple[list[str], np.ndarray]:
     """Return IDs and vectors from a dataset containing embeddings."""
 
@@ -85,6 +87,37 @@ def extract_embeddings(
         raise KeyError(f"Column '{id_column}' not found in dataset")
     if embedding_column not in dataset.column_names:
         raise KeyError(f"Column '{embedding_column}' not found in dataset")
+
+    if batch_size is not None:
+        if batch_size <= 0:
+            raise ValueError("batch_size must be a positive integer")
+        identifiers: list[str] = []
+        batches: list[np.ndarray] = []
+        iterator = getattr(dataset, "iter", None)
+        if callable(iterator):
+            for batch in iterator(batch_size=batch_size):
+                identifiers.extend(str(value) for value in batch[id_column])
+                batch_vectors = np.asarray(batch[embedding_column], dtype="float32")
+                if batch_vectors.ndim == 1:
+                    batch_vectors = np.expand_dims(batch_vectors, axis=0)
+                batches.append(batch_vectors)
+        else:
+            total = len(dataset)
+            for start in range(0, total, batch_size):
+                stop = min(start + batch_size, total)
+                slice_batch = dataset[start:stop]
+                identifiers.extend(str(value) for value in slice_batch[id_column])
+                batch_vectors = np.asarray(slice_batch[embedding_column], dtype="float32")
+                if batch_vectors.ndim == 1:
+                    batch_vectors = np.expand_dims(batch_vectors, axis=0)
+                batches.append(batch_vectors)
+        if batches:
+            vectors = np.concatenate(batches, axis=0)
+        else:
+            vectors = np.empty((0,), dtype="float32")
+        if vectors.ndim != 2:
+            raise ValueError("Embedding column must contain 2D vectors")
+        return identifiers, vectors
 
     identifiers = [str(value) for value in dataset[id_column]]
     vectors = np.asarray(dataset[embedding_column], dtype="float32")
