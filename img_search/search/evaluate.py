@@ -9,6 +9,7 @@ from typing import Any
 
 from hydra import main as hydra_main
 from hydra.utils import get_original_cwd
+from loguru import logger
 from omegaconf import DictConfig, OmegaConf
 from rich.console import Console
 from rich.progress import (
@@ -20,8 +21,6 @@ from rich.progress import (
     TimeRemainingColumn,
 )
 from rich.table import Table
-
-from loguru import logger
 
 from img_search.data.embeddings import (
     EmbeddingDatasetSpec,
@@ -203,7 +202,6 @@ def run_search_evaluation(config: SearchEvalConfig) -> list[dict[str, Any]]:
         row.setdefault("num_queries", len(query_ids))
         row.setdefault("top_k", top_k)
     return results
-
 
 
 def _results_table(rows: list[dict[str, Any]], settings: BenchmarkSettings) -> Table:
