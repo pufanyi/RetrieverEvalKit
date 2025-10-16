@@ -16,7 +16,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument(
         "--repo-id",
         type=str,
-        default="pufanyi/flickr-jina-embeddings-v4",
+        default="pufanyi/flickr30k-jina-embeddings-v4",
         help="The Hugging Face repository ID to upload the dataset to.",
     )
     parser.add_argument(
