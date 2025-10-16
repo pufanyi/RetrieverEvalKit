@@ -1,0 +1,5 @@
+defaults:
+  - image_dataset: local_demo
+  - query_dataset: local_demo
+  - evaluation: default
+  - _self_

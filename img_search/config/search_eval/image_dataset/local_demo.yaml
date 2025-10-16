@@ -1,0 +1,10 @@
+# Update load_from_disk to point at your image embedding dataset on disk.
+dataset_name: null
+dataset_config: null
+data_files: null
+split: null
+revision: null
+load_from_disk: data/faiss_demo/image_embeddings
+id_column: image_id
+embedding_column: embedding
+metadata_columns: []

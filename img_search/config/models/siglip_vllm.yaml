@@ -3,4 +3,3 @@
   batch_size: 128
   kwargs:
     dtype: float16
-

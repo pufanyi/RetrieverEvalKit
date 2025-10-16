@@ -1,0 +1,11 @@
+# Update load_from_disk to point at your query embedding dataset on disk.
+dataset_name: null
+dataset_config: null
+data_files: null
+split: null
+revision: null
+load_from_disk: data/faiss_demo/query_embeddings
+id_column: query_id
+embedding_column: embedding
+metadata_columns: []
+relevance_column: relevant_ids
