@@ -1,9 +1,15 @@
-# FAISS Benchmark Harness
+# ANN Benchmark Harness
 
-This repository ships a lightweight harness for comparing multiple FAISS search
-strategies against a shared set of image and query embeddings. The workflow is
-configurable via [Hydra](https://hydra.cc/) YAML files so you can point the
-benchmark at any Hugging Face dataset containing pre-computed embeddings.
+This repository ships a lightweight harness for comparing approximate nearest
+neighbour (ANN) search strategies—including FAISS, ScaNN, and HNSWlib—against a
+shared set of image and query embeddings. The workflow is configurable via
+[Hydra](https://hydra.cc/) YAML files so you can point the benchmark at any
+Hugging Face dataset containing pre-computed embeddings.
+
+Optional dependencies are required for ScaNN (`pip install scann`) and HNSWlib
+(`pip install hnswlib`). The harness automatically skips methods whose
+libraries are not installed and logs a warning so you can run FAISS-only
+benchmarks without additional packages.
 
 ## Dataset Format
 
@@ -31,9 +37,9 @@ The harness pulls settings from three Hydra config groups located under
 
 - **`image_dataset/*.yaml`** – points to the embedding dataset for the gallery.
 - **`query_dataset/*.yaml`** – points to the query embeddings and optional
-ground-truth column.
-- **`evaluation/*.yaml`** – selects which FAISS methods to benchmark and whether
-to force GPU execution.
+  ground-truth column.
+- **`evaluation/*.yaml`** – selects which ANN methods to benchmark and whether
+  to force GPU execution for FAISS.
 
 Large corpora can overwhelm RAM when converted into dense NumPy arrays. Both the
 image and query dataset specs accept an optional `memmap_path` field; when set,
@@ -55,12 +61,18 @@ defaults:
 
 Update the `load_from_disk` path (or switch to a Hub dataset name) in
 `image_dataset/local_demo.yaml` and `query_dataset/local_demo.yaml` to match your
-artifacts. The evaluation config already lists three FAISS methods (flat,
-IVF-Flat, HNSW) and will write the consolidated metrics to
-`outputs/faiss_benchmark.csv`. When GPU support is available, the harness will
-automatically benchmark both CPU and GPU variants of each FAISS method so you
-can compare throughput without changing the configuration. Environments without
-CUDA simply skip the GPU rows while keeping the CPU measurements intact.
+artifacts. The `evaluation` group now ships with several presets:
+
+- `default` – runs FAISS Flat/IVF/HNSW alongside ScaNN and HNSWlib so you can
+  compare every backend in one sweep.
+- `faiss_only` – restricts the run to FAISS methods while still comparing CPU
+  and GPU variants when available.
+- `scann_only` – configures the ScaNN builder with the default leaf and reorder
+  parameters.
+- `hnswlib_only` – evaluates the HNSWlib index with typical graph parameters.
+
+Feel free to copy these YAML files or create new ones tailored to your dataset
+characteristics (e.g., adjusting `nlist`, `ef_search`, or ScaNN leaf counts).
 
 Looking for a ready-made corpus? The
 [`pufanyi/flickr30k-jina-embeddings-v4`](https://huggingface.co/datasets/pufanyi/flickr30k-jina-embeddings-v4)
@@ -94,18 +106,19 @@ uv run scripts/run_search_eval.py
 ```
 
 Hydra exposes the usual override syntax so you can swap datasets or settings at
-invocation time. For example, to compare a GPU build of IVF-PQ with a different
-recall schedule:
+invocation time. For example, to compare a GPU build of FAISS IVF-PQ with a
+custom recall schedule while keeping the ScaNN preset:
 
 ```bash
 uv run python -m img_search.search.evaluate \
-  evaluation.methods='[{method: ivf_pq, metric: cosine, nlist: 1024, nprobe: 32, m: 8}]' \
+  evaluation.methods='[{backend: faiss, method: ivf_pq, metric: cosine, nlist: 1024, nprobe: 32, m: 8}]' \
   evaluation.use_gpu=true \
+  +evaluation.methods.1='{backend: scann, method: scann_default, metric: cosine}' \
   evaluation.recall_at='[1, 5, 10, 20]'
 ```
 
 The script prints a Rich table summarising timing, accuracy, and recall metrics
 per method and optionally saves the raw rows as CSV for downstream analysis. A
-brute-force baseline now rounds out the table by computing exact similarity
-scores with NumPy. The baseline is reported once per metric used in the FAISS
-configs so you can see the recall ceiling alongside approximate index results.
+brute-force baseline rounds out the table by computing exact similarity scores
+with NumPy. The baseline is reported once per metric used in the ANN configs so
+you can see the recall ceiling alongside approximate index results.

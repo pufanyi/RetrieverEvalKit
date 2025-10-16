@@ -1,0 +1,12 @@
+methods:
+  - backend: scann
+    method: scann_default
+    metric: cosine
+    num_neighbors: 100
+    num_leaves: 2000
+    num_leaves_to_search: 100
+    reorder_k: 250
+top_k: 100
+recall_at: [1, 5, 10, 50]
+use_gpu: false
+output_path: outputs/scann_benchmark.csv

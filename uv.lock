@@ -773,6 +773,15 @@ wheels = [
 ]
 
 [[package]]
+name = "hnswlib"
+version = "0.8.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/cf/7a/1a9b1405f2eb59515f06c3074750b03e0e96edf7fee0f6dd6df81d9c21d7/hnswlib-0.8.0.tar.gz", hash = "sha256:cb6d037eedebb34a7134e7dc78966441dfd04c9cf5ee93911be911ced951c44c", size = 36206, upload-time = "2023-12-03T04:16:17.55Z" }
+
+[[package]]
 name = "httpcore"
 version = "1.0.9"
 source = { registry = "https://pypi.org/simple" }
@@ -874,6 +883,7 @@ dependencies = [
     { name = "accelerate" },
     { name = "datasets" },
     { name = "faiss-cpu" },
+    { name = "hnswlib" },
     { name = "hydra-core" },
     { name = "ipykernel" },
     { name = "lmdb" },
@@ -883,6 +893,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pymilvus", extra = ["milvus-lite"] },
     { name = "rich" },
+    { name = "scann" },
     { name = "sentence-transformers" },
     { name = "vllm" },
 ]
@@ -900,6 +911,7 @@ requires-dist = [
     { name = "accelerate", specifier = ">=1.10.1" },
     { name = "datasets", specifier = ">=4.1.0" },
     { name = "faiss-cpu", specifier = ">=1.8.0" },
+    { name = "hnswlib", specifier = ">=0.8.0" },
     { name = "hydra-core", specifier = ">=1.3.2" },
     { name = "ipykernel", specifier = ">=7.0.1" },
     { name = "lmdb", specifier = ">=1.7.3" },
@@ -909,6 +921,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.11.7" },
     { name = "pymilvus", extras = ["milvus-lite"], specifier = ">=2.6.2" },
     { name = "rich", specifier = ">=14.1.0" },
+    { name = "scann", specifier = ">=1.2.10" },
     { name = "sentence-transformers", specifier = ">=3.0.0" },
     { name = "vllm", specifier = ">=0.10.2" },
 ]
@@ -2706,6 +2719,19 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ad/fe/cad1d9762868c7c5dc70c8620074df28ebb1a8e4c17d4c0cb031889c457e/safetensors-0.6.2-cp38-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:d944cea65fad0ead848b6ec2c37cc0b197194bec228f8020054742190e9312ac", size = 655957, upload-time = "2025-08-08T13:13:57.029Z" },
     { url = "https://files.pythonhosted.org/packages/59/a7/e2158e17bbe57d104f0abbd95dff60dda916cf277c9f9663b4bf9bad8b6e/safetensors-0.6.2-cp38-abi3-win32.whl", hash = "sha256:cab75ca7c064d3911411461151cb69380c9225798a20e712b102edda2542ddb1", size = 308926, upload-time = "2025-08-08T13:14:01.095Z" },
     { url = "https://files.pythonhosted.org/packages/2c/c3/c0be1135726618dc1e28d181b8c442403d8dbb9e273fd791de2d4384bcdd/safetensors-0.6.2-cp38-abi3-win_amd64.whl", hash = "sha256:c7b214870df923cbc1593c3faee16bec59ea462758699bd3fee399d00aac072c", size = 320192, upload-time = "2025-08-08T13:13:59.467Z" },
+]
+
+[[package]]
+name = "scann"
+version = "1.4.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "protobuf" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/89/a1/b868924221e7ec8a8c2e7b74ad9fc730fe5554962dc0d56efc2615d03ea3/scann-1.4.2-cp313-cp313-manylinux_2_27_aarch64.whl", hash = "sha256:469a4a907ea09a15e4c25850330377bd9967c29177d836600051caf281e33612", size = 9296343, upload-time = "2025-08-29T14:32:35.436Z" },
+    { url = "https://files.pythonhosted.org/packages/3b/b4/3decfd7039399b6bd9c9fbf0ccda39301bac01c39a09a5a791c8237f5d26/scann-1.4.2-cp313-cp313-manylinux_2_27_x86_64.whl", hash = "sha256:c87e97f91c98d7d1f0bf985b39634e07e1149ba79c20f7dbf9b7b465c94100f2", size = 11579811, upload-time = "2025-08-29T14:32:25.101Z" },
 ]
 
 [[package]]

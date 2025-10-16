@@ -1,8 +1,8 @@
-"""Command-line utilities for benchmarking FAISS configurations."""
+"""Command-line utilities for benchmarking ANN backends side by side."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -36,11 +36,13 @@ from img_search.search.faiss_search import (
     faiss_gpu_count,
     faiss_supports_gpu,
 )
+from img_search.search.hnswlib_search import HnswlibIndexConfig, hnswlib_available
+from img_search.search.scann_search import ScannIndexConfig, scann_available
 
 
 @dataclass(slots=True)
 class BenchmarkSettings:
-    """Parameters controlling the FAISS benchmark run."""
+    """Parameters controlling the ANN benchmark run."""
 
     methods: list[dict[str, Any]] = field(default_factory=lambda: [{"method": "flat"}])
     top_k: int = 10
@@ -102,19 +104,72 @@ def _expand_method_configs(
     *,
     gpu_available: bool,
 ) -> list[dict[str, Any]]:
-    """Expand configured methods into concrete FAISS index settings."""
+    """Expand configured methods into concrete ANN index settings."""
 
     expanded: list[dict[str, Any]] = []
     for method in methods:
         override = dict(method)
+        backend = str(override.get("backend", "faiss")).lower()
+        override["backend"] = backend
         override.pop("use_gpu", None)
-        if use_gpu is None:
-            expanded.append({**override, "use_gpu": False})
-            if gpu_available:
-                expanded.append({**override, "use_gpu": True})
+        if backend == "faiss":
+            if use_gpu is None:
+                expanded.append({**override, "use_gpu": False})
+                if gpu_available:
+                    expanded.append({**override, "use_gpu": True})
+            else:
+                expanded.append({**override, "use_gpu": bool(use_gpu and gpu_available)})
         else:
-            expanded.append({**override, "use_gpu": bool(use_gpu and gpu_available)})
+            expanded.append({**override, "use_gpu": False})
     return expanded
+
+
+def _backend_name(
+    cfg: FaissIndexConfig | ScannIndexConfig | HnswlibIndexConfig | Mapping[str, Any]
+) -> str:
+    if isinstance(cfg, FaissIndexConfig):
+        return "faiss"
+    if isinstance(cfg, ScannIndexConfig):
+        return "scann"
+    if isinstance(cfg, HnswlibIndexConfig):
+        return "hnswlib"
+    return str(cfg.get("backend", "faiss")).lower()
+
+
+def _filter_unavailable_backends(
+    method_configs: Sequence[
+        FaissIndexConfig | ScannIndexConfig | HnswlibIndexConfig | Mapping[str, Any]
+    ],
+) -> list[FaissIndexConfig | ScannIndexConfig | HnswlibIndexConfig | Mapping[str, Any]]:
+    """Drop configurations whose optional dependencies are not installed."""
+
+    availability = {
+        "faiss": True,
+        "scann": scann_available(),
+        "hnswlib": hnswlib_available(),
+    }
+    skipped: dict[str, int] = {}
+    filtered: list[
+        FaissIndexConfig | ScannIndexConfig | HnswlibIndexConfig | Mapping[str, Any]
+    ] = []
+    for cfg in method_configs:
+        backend = _backend_name(cfg)
+        if availability.get(backend, False):
+            filtered.append(cfg)
+        else:
+            skipped[backend] = skipped.get(backend, 0) + 1
+    for backend, count in skipped.items():
+        dependency = {
+            "scann": "ScaNN",
+            "hnswlib": "HNSWlib",
+        }.get(backend, backend)
+        logger.warning(
+            "Skipping %s %s configuration(s) because %s is not installed.",
+            count,
+            backend,
+            dependency,
+        )
+    return filtered
 
 
 def run_search_evaluation(config: SearchEvalConfig) -> list[dict[str, Any]]:
@@ -211,15 +266,16 @@ def run_search_evaluation(config: SearchEvalConfig) -> list[dict[str, Any]]:
                 "search.",
             )
 
-    method_configs: list[FaissIndexConfig | dict[str, Any]] = _expand_method_configs(
+    method_configs = _expand_method_configs(
         config.evaluation.methods,
         config.evaluation.use_gpu,
         gpu_available=gpu_available,
     )
+    method_configs = _filter_unavailable_backends(method_configs)
 
     top_k = _ensure_top_k(config.evaluation)
     logger.info(
-        "Prepared {} FAISS method configuration(s) (top_k={}, recall_at={})",
+        "Prepared %s ANN method configuration(s) (top_k=%s, recall_at=%s)",
         len(method_configs),
         top_k,
         config.evaluation.recall_at,
@@ -242,29 +298,30 @@ def run_search_evaluation(config: SearchEvalConfig) -> list[dict[str, Any]]:
         transient=True,
         disable=not progress_console.is_interactive,
     ) as progress:
-        results = benchmark_methods(
-            image_vectors,
-            query_vectors,
-            ids=image_ids,
-            method_configs=method_configs,
-            top_k=top_k,
-            ground_truth=ground_truth,
-            recall_points=config.evaluation.recall_at,
-            progress=progress,
-        )
+        if method_configs:
+            results = benchmark_methods(
+                image_vectors,
+                query_vectors,
+                ids=image_ids,
+                method_configs=method_configs,
+                top_k=top_k,
+                ground_truth=ground_truth,
+                recall_points=config.evaluation.recall_at,
+                progress=progress,
+            )
+        else:
+            results = []
     logger.info(
         "Benchmark complete; collected {} result rows",
         len(results),
     )
 
-    metrics = sorted(
-        {
-            cfg.metric
-            if isinstance(cfg, FaissIndexConfig)
-            else str(cfg.get("metric", "l2")).lower()
-            for cfg in method_configs
-        }
-    )
+    def _metric_value(cfg: FaissIndexConfig | ScannIndexConfig | HnswlibIndexConfig | dict[str, Any]) -> str:
+        if isinstance(cfg, (FaissIndexConfig, ScannIndexConfig, HnswlibIndexConfig)):
+            return str(cfg.metric).lower()
+        return str(cfg.get("metric", "l2")).lower()
+
+    metrics = sorted({_metric_value(cfg) for cfg in method_configs})
     brute_rows = benchmark_bruteforce(
         image_vectors,
         query_vectors,
@@ -286,6 +343,7 @@ def run_search_evaluation(config: SearchEvalConfig) -> list[dict[str, Any]]:
 
 def _results_table(rows: list[dict[str, Any]], settings: BenchmarkSettings) -> Table:
     console_columns = [
+        "backend",
         "method",
         "metric",
         "use_gpu",
@@ -300,7 +358,7 @@ def _results_table(rows: list[dict[str, Any]], settings: BenchmarkSettings) -> T
         console_columns.append(f"recall@{point}")
     console_columns.extend(["top_k", "num_queries"])
 
-    table = Table(title="FAISS Benchmark Summary")
+    table = Table(title="ANN Benchmark Summary")
     for column in console_columns:
         table.add_column(column, justify="right" if "time" in column else "left")
 
