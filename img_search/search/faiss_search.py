@@ -30,6 +30,26 @@ except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency
     ) from exc
 
 
+def faiss_supports_gpu() -> bool:
+    """Return ``True`` when the installed FAISS build exposes GPU bindings."""
+
+    return hasattr(faiss, "StandardGpuResources")
+
+
+def faiss_gpu_count() -> int:
+    """Return the number of GPUs visible to FAISS, falling back to ``0``."""
+
+    if not faiss_supports_gpu():
+        return 0
+    get_num_gpus = getattr(faiss, "get_num_gpus", None)
+    if get_num_gpus is None:
+        return 0
+    try:
+        return int(get_num_gpus())
+    except Exception:  # pragma: no cover - defensive guard
+        return 0
+
+
 @dataclass(slots=True)
 class FaissIndexConfig:
     """Configuration describing how the FAISS index should be built."""
@@ -89,9 +109,9 @@ class FaissIndexConfig:
             self.normalize = self.metric == "cosine"
 
         if self.use_gpu:
-            if not hasattr(faiss, "StandardGpuResources"):
+            if not faiss_supports_gpu():
                 raise RuntimeError("FAISS was compiled without GPU support")
-            available = faiss.get_num_gpus() if hasattr(faiss, "get_num_gpus") else 0
+            available = faiss_gpu_count()
             if available == 0:
                 raise RuntimeError("No GPU devices available for FAISS")
             if self.gpu_device is None:
