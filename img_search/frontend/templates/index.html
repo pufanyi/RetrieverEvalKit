@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Flickr30k · Jina V4 Search Demo</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Flickr30k × Jina V4 Retrieval Demo</h1>
+      <p>Interactively explore text & image retrieval over the Flickr30k embeddings with multiple ANN backends.</p>
+    </header>
+    <div class="layout">
+      <section class="panel">
+        <form id="searchForm">
+          <label for="backendSelect">Search backend</label>
+          <select id="backendSelect"></select>
+
+          <label for="topK">Top-K results</label>
+          <input type="number" id="topK" min="1" max="50" value="9" />
+
+          <fieldset>
+            <legend>Query source</legend>
+            <div class="radio-row">
+              <label><input type="radio" name="queryMode" value="text" checked />Text</label>
+              <label><input type="radio" name="queryMode" value="caption" />Caption ID</label>
+              <label><input type="radio" name="queryMode" value="image" />Image ID</label>
+            </div>
+          </fieldset>
+
+          <div id="textQueryGroup">
+            <label for="textQuery">Free-form text</label>
+            <textarea id="textQuery" placeholder="Describe the scene you are looking for..."></textarea>
+          </div>
+
+          <div id="captionQueryGroup" style="display:none;">
+            <label for="captionId">Caption embedding ID</label>
+            <div class="actions">
+              <input type="text" id="captionId" placeholder="e.g. 12345" />
+              <button type="button" id="previewCaption">Preview</button>
+            </div>
+            <div id="captionPreview" class="status" style="display:none;"></div>
+          </div>
+
+          <div id="imageQueryGroup" style="display:none;">
+            <label for="imageId">Image ID</label>
+            <input type="text" id="imageId" placeholder="e.g. 1000092795" />
+          </div>
+
+          <div class="actions" style="margin-top:1.25rem;">
+            <button type="submit">Run search</button>
+            <span id="formError" class="error"></span>
+          </div>
+        </form>
+
+        <div class="status" id="statusInfo"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Results</h2>
+        <div id="results"></div>
+      </section>
+    </div>
+  </main>
+  <script src="/static/script.js"></script>
+</body>
+</html>
