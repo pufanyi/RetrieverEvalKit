@@ -33,6 +33,8 @@ from img_search.search.faiss_search import (
     FaissIndexConfig,
     benchmark_bruteforce,
     benchmark_methods,
+    faiss_gpu_count,
+    faiss_supports_gpu,
 )
 
 
@@ -92,6 +94,27 @@ def _dataset_size(dataset: Any) -> str:
         logger.debug("Unable to determine dataset size: {}", exc)
         return "unknown"
     return f"{size:,}"
+
+
+def _expand_method_configs(
+    methods: Sequence[dict[str, Any]],
+    use_gpu: bool | None,
+    *,
+    gpu_available: bool,
+) -> list[dict[str, Any]]:
+    """Expand configured methods into concrete FAISS index settings."""
+
+    expanded: list[dict[str, Any]] = []
+    for method in methods:
+        override = dict(method)
+        override.pop("use_gpu", None)
+        if use_gpu is None:
+            expanded.append({**override, "use_gpu": False})
+            if gpu_available:
+                expanded.append({**override, "use_gpu": True})
+        else:
+            expanded.append({**override, "use_gpu": bool(use_gpu and gpu_available)})
+    return expanded
 
 
 def run_search_evaluation(config: SearchEvalConfig) -> list[dict[str, Any]]:
@@ -171,26 +194,28 @@ def run_search_evaluation(config: SearchEvalConfig) -> list[dict[str, Any]]:
             len(ground_truth),
         )
 
-    method_configs: list[FaissIndexConfig | dict[str, Any]] = []
-    for method in config.evaluation.methods:
-        override = dict(method)
-        override.pop("use_gpu", None)
-        if config.evaluation.use_gpu is None:
-            method_configs.append({**override, "use_gpu": False})
-            try:
-                FaissIndexConfig.from_mapping({**override, "use_gpu": True})
-            except RuntimeError as exc:
-                logger.warning(
-                    "Skipping GPU variant for method '%s': %s",
-                    override.get("method", "unknown"),
-                    exc,
-                )
-            else:
-                method_configs.append({**override, "use_gpu": True})
-        else:
-            method_configs.append(
-                {**override, "use_gpu": bool(config.evaluation.use_gpu)}
+    gpu_supported = faiss_supports_gpu()
+    available_gpu_count = faiss_gpu_count() if gpu_supported else 0
+    gpu_available = gpu_supported and available_gpu_count > 0
+    if config.evaluation.use_gpu:
+        if not gpu_supported:
+            logger.warning(
+                "FAISS GPU evaluation requested but the installed package lacks GPU "
+                "bindings (typically `faiss-cpu`). Install `faiss-gpu` and ensure the "
+                "CUDA runtime is available. Falling back to CPU-only search.",
             )
+        elif available_gpu_count == 0:
+            logger.warning(
+                "FAISS GPU evaluation requested but no CUDA devices were detected by "
+                "FAISS. Verify your drivers and visibility. Falling back to CPU-only "
+                "search.",
+            )
+
+    method_configs: list[FaissIndexConfig | dict[str, Any]] = _expand_method_configs(
+        config.evaluation.methods,
+        config.evaluation.use_gpu,
+        gpu_available=gpu_available,
+    )
 
     top_k = _ensure_top_k(config.evaluation)
     logger.info(
