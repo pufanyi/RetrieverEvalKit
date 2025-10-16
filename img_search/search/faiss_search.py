@@ -401,9 +401,7 @@ def benchmark_bruteforce(
         raise ValueError("ids length must match embeddings length")
 
     recall_points = _normalise_recall_points(recall_points)
-    metrics = list(
-        dict.fromkeys(str(metric).lower() for metric in (metrics or ["l2"]))
-    )
+    metrics = list(dict.fromkeys(str(metric).lower() for metric in (metrics or ["l2"])))
     rows: list[dict[str, Any]] = []
 
     actual_k = min(int(top_k), embeddings_matrix.shape[0])
