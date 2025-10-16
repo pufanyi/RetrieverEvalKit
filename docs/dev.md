@@ -6,6 +6,15 @@
 uv sync --dev
 ```
 
+The default environment pulls in the GPU-enabled FAISS bindings (`faiss-gpu-cu12`)
+on Linux hosts running Python 3.10–3.12. If you're on a CPU-only machine (or
+otherwise can't build the GPU wheels), swap to the CPU distribution during
+sync:
+
+```bash
+uv sync --dev --no-install-package faiss-gpu-cu12 --extra cpu
+```
+
 ## Run Pre-commit
 
 Before committing, run the following command to check the code style:
