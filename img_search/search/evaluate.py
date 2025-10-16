@@ -266,12 +266,12 @@ def run_search_evaluation(config: SearchEvalConfig) -> list[dict[str, Any]]:
                 "search.",
             )
 
-    method_configs = _expand_method_configs(
+    expanded_configs = _expand_method_configs(
         config.evaluation.methods,
         config.evaluation.use_gpu,
         gpu_available=gpu_available,
     )
-    method_configs = _filter_unavailable_backends(method_configs)
+    method_configs = _filter_unavailable_backends(expanded_configs)
 
     top_k = _ensure_top_k(config.evaluation)
     logger.info(
