@@ -113,6 +113,12 @@ def run_search_evaluation(config: SearchEvalConfig) -> list[dict[str, Any]]:
         _dataset_size(query_dataset),
     )
 
+    logger.info(
+        "Extracting image embeddings (id_column='{}', embedding_column='{}')",
+        config.image_dataset.id_column,
+        config.image_dataset.embedding_column,
+    )
+    logger.debug("Image dataset type: {}", type(image_dataset))
     image_ids, image_vectors = extract_embeddings(
         image_dataset,
         id_column=config.image_dataset.id_column,
@@ -124,6 +130,12 @@ def run_search_evaluation(config: SearchEvalConfig) -> list[dict[str, Any]]:
         len(image_ids),
         image_dim,
     )
+    logger.info(
+        "Extracting query embeddings (id_column='{}', embedding_column='{}')",
+        config.query_dataset.id_column,
+        config.query_dataset.embedding_column,
+    )
+    logger.debug("Query dataset type: {}", type(query_dataset))
     query_ids, query_vectors = extract_embeddings(
         query_dataset,
         id_column=config.query_dataset.id_column,
