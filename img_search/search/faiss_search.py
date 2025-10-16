@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 import numpy as np
+from rich.progress import Progress, TaskID
 
 try:  # pragma: no cover - exercised in tests when faiss is available
     import faiss  # type: ignore[import-not-found]
@@ -275,8 +276,14 @@ def benchmark_methods(
     top_k: int = 5,
     ground_truth: Sequence[Sequence[str] | str] | None = None,
     recall_points: Sequence[int] | None = None,
+    progress: Progress | None = None,
 ) -> list[dict[str, Any]]:
-    """Benchmark multiple FAISS configurations on shared data."""
+    """Benchmark multiple FAISS configurations on shared data.
+
+    When ``progress`` is provided, the function will update the task with
+    high-level progress for each FAISS configuration as it is prepared,
+    searched, and scored.
+    """
 
     embeddings_matrix = _as_matrix(embeddings)
     query_matrix = _as_matrix(queries, dim=embeddings_matrix.shape[1])
@@ -291,19 +298,51 @@ def benchmark_methods(
         {int(point) for point in recall_points or [] if int(point) > 0}
     )
 
-    for cfg in method_configs:
+    configs_list = list(method_configs)
+    method_task: TaskID | None = None
+    if progress is not None:
+        method_task = progress.add_task(
+            description="Benchmarking FAISS methods",
+            total=len(configs_list),
+            visible=len(configs_list) > 0,
+        )
+
+    for cfg in configs_list:
         index_config = (
             FaissIndexConfig.from_mapping(cfg) if isinstance(cfg, Mapping) else cfg
         )
         index = FaissSearchIndex(embeddings_matrix.shape[1], config=index_config)
 
+        method_label = f"{index_config.method} ({index_config.metric})"
+        step_task: TaskID | None = None
+        if progress is not None:
+            step_task = progress.add_task(
+                description=f"[cyan]{method_label}: preparing",
+                total=3,
+                visible=True,
+            )
+
         build_start = time.perf_counter()
         index.add_embeddings(ids, embeddings_matrix)
         build_time = time.perf_counter() - build_start
 
+        if progress is not None and step_task is not None:
+            progress.update(
+                step_task,
+                advance=1,
+                description=f"[cyan]{method_label}: searching",
+            )
+
         search_start = time.perf_counter()
         hits = index.search(query_matrix, top_k=top_k)
         search_time = time.perf_counter() - search_start
+
+        if progress is not None and step_task is not None:
+            progress.update(
+                step_task,
+                advance=1,
+                description=f"[cyan]{method_label}: scoring",
+            )
 
         if not hits:
             per_query_results = [[] for _ in range(query_matrix.shape[0])]
@@ -357,6 +396,16 @@ def benchmark_methods(
                 row[f"recall@{point}"] = recall_totals[point] / recall_counts[point]
 
         results.append(row)
+
+        if progress is not None and step_task is not None:
+            progress.update(
+                step_task,
+                advance=1,
+                description=f"[cyan]{method_label}: complete",
+            )
+            progress.update(step_task, visible=False)
+        if progress is not None and method_task is not None:
+            progress.advance(method_task)
 
     return results
 

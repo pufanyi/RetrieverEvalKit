@@ -11,6 +11,14 @@ from hydra import main as hydra_main
 from hydra.utils import get_original_cwd
 from omegaconf import DictConfig, OmegaConf
 from rich.console import Console
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+)
 from rich.table import Table
 
 from loguru import logger
@@ -164,15 +172,28 @@ def run_search_evaluation(config: SearchEvalConfig) -> list[dict[str, Any]]:
         len(query_ids),
     )
 
-    results = benchmark_methods(
-        image_vectors,
-        query_vectors,
-        ids=image_ids,
-        method_configs=method_configs,
-        top_k=top_k,
-        ground_truth=ground_truth,
-        recall_points=config.evaluation.recall_at,
-    )
+    progress_console = Console(stderr=True)
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TimeRemainingColumn(),
+        TimeElapsedColumn(),
+        console=progress_console,
+        transient=True,
+        disable=not progress_console.is_interactive,
+    ) as progress:
+        results = benchmark_methods(
+            image_vectors,
+            query_vectors,
+            ids=image_ids,
+            method_configs=method_configs,
+            top_k=top_k,
+            ground_truth=ground_truth,
+            recall_points=config.evaluation.recall_at,
+            progress=progress,
+        )
     logger.info(
         "Benchmark complete; collected {} result rows",
         len(results),
