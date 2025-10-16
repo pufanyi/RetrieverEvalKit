@@ -51,6 +51,22 @@ artifacts. The evaluation config already lists three FAISS methods (flat,
 IVF-Flat, HNSW) and will write the consolidated metrics to
 `outputs/faiss_benchmark.csv`.
 
+Looking for a ready-made corpus? The
+[`pufanyi/flickr30k-jina-embeddings-v4`](https://huggingface.co/datasets/pufanyi/flickr30k-jina-embeddings-v4)
+dataset on the Hugging Face Hub exposes JinaCLIP embeddings for Flickr30k
+images and captions. This repository now ships config stubs so you can evaluate
+it out of the box:
+
+```bash
+uv run python -m img_search.search.evaluate \
+  image_dataset=flickr30k_jina \
+  query_dataset=flickr30k_jina
+```
+
+The image split stores one vector per Flickr30k photo under the `id` column,
+while the caption split includes five caption embeddings per image and uses the
+`image_id` column for relevance labels.
+
 ## Running the Benchmark
 
 Once the datasets and configs are in place, launch the benchmark either through

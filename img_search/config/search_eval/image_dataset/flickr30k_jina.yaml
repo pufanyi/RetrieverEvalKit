@@ -1,0 +1,11 @@
+dataset_name: pufanyi/flickr30k-jina-embeddings-v4
+dataset_config: images
+data_files: null
+split: train
+revision: null
+load_from_disk: null
+id_column: id
+embedding_column: embedding
+metadata_columns:
+  - model_name
+  - dataset_name
