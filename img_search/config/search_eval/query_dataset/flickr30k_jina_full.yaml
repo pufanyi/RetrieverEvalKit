@@ -1,5 +1,5 @@
 dataset_name: pufanyi/flickr30k-jina-embeddings-v4
-dataset_config: texts-tiny
+dataset_config: texts
 data_files: null
 split: train
 revision: null
