@@ -13,6 +13,8 @@ from omegaconf import DictConfig, OmegaConf
 from rich.console import Console
 from rich.table import Table
 
+from loguru import logger
+
 from img_search.data.embeddings import (
     EmbeddingDatasetSpec,
     QueryDatasetSpec,
@@ -48,29 +50,99 @@ def _ensure_top_k(settings: BenchmarkSettings) -> int:
     return max(settings.top_k, recall_max)
 
 
+def _describe_spec(spec: EmbeddingDatasetSpec) -> str:
+    parts: list[str] = []
+    if spec.load_from_disk:
+        parts.append(f"load_from_disk={spec.load_from_disk}")
+    else:
+        if spec.dataset_name:
+            parts.append(f"name={spec.dataset_name}")
+        if spec.dataset_config:
+            parts.append(f"config={spec.dataset_config}")
+        if spec.split:
+            parts.append(f"split={spec.split}")
+        if spec.revision:
+            parts.append(f"revision={spec.revision}")
+        if spec.data_files:
+            parts.append("data_files=provided")
+    parts.append(f"id_column={spec.id_column}")
+    parts.append(f"embedding_column={spec.embedding_column}")
+    if isinstance(spec, QueryDatasetSpec) and getattr(spec, "relevance_column", None):
+        parts.append(f"relevance_column={spec.relevance_column}")
+    return ", ".join(parts)
+
+
+def _dataset_size(dataset: Any) -> str:
+    try:
+        size = len(dataset)  # type: ignore[arg-type]
+    except TypeError:
+        return "unknown (streaming)"
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.debug("Unable to determine dataset size: {}", exc)
+        return "unknown"
+    return f"{size:,}"
+
+
 def run_search_evaluation(config: SearchEvalConfig) -> list[dict[str, Any]]:
     """Execute the benchmark described by ``config`` and return raw rows."""
 
+    logger.info(
+        "Loading image embeddings dataset: {}",
+        _describe_spec(config.image_dataset),
+    )
     image_dataset = load_embedding_dataset(config.image_dataset)
+    logger.info(
+        "Loaded image embeddings dataset (size={})",
+        _dataset_size(image_dataset),
+    )
+
+    logger.info(
+        "Loading query embeddings dataset: {}",
+        _describe_spec(config.query_dataset),
+    )
     query_dataset = load_embedding_dataset(config.query_dataset)
+    logger.info(
+        "Loaded query embeddings dataset (size={})",
+        _dataset_size(query_dataset),
+    )
 
     image_ids, image_vectors = extract_embeddings(
         image_dataset,
         id_column=config.image_dataset.id_column,
         embedding_column=config.image_dataset.embedding_column,
     )
+    image_dim = image_vectors.shape[1] if image_vectors.ndim == 2 else "unknown"
+    logger.info(
+        "Extracted image embeddings: count={} dim={}",
+        len(image_ids),
+        image_dim,
+    )
     query_ids, query_vectors = extract_embeddings(
         query_dataset,
         id_column=config.query_dataset.id_column,
         embedding_column=config.query_dataset.embedding_column,
     )
+    query_dim = query_vectors.shape[1] if query_vectors.ndim == 2 else "unknown"
+    logger.info(
+        "Extracted query embeddings: count={} dim={}",
+        len(query_ids),
+        query_dim,
+    )
 
     ground_truth: list[Sequence[str] | str] | None = None
     if config.query_dataset.relevance_column:
+        logger.info(
+            "Extracting relevance labels from column '{}'",
+            config.query_dataset.relevance_column,
+        )
         raw_truth = extract_relevance(
             query_dataset, relevance_column=config.query_dataset.relevance_column
         )
         ground_truth = list(raw_truth)
+        logger.info(
+            "Loaded relevance labels for {} queries",
+            len(ground_truth),
+        )
 
     method_configs: list[FaissIndexConfig | dict[str, Any]] = []
     for method in config.evaluation.methods:
@@ -79,20 +151,38 @@ def run_search_evaluation(config: SearchEvalConfig) -> list[dict[str, Any]]:
             override["use_gpu"] = config.evaluation.use_gpu
         method_configs.append(override)
 
+    top_k = _ensure_top_k(config.evaluation)
+    logger.info(
+        "Prepared {} FAISS method configuration(s) (top_k={}, recall_at={})",
+        len(method_configs),
+        top_k,
+        config.evaluation.recall_at,
+    )
+    logger.info(
+        "Running benchmark across {} image vectors and {} query vectors",
+        len(image_ids),
+        len(query_ids),
+    )
+
     results = benchmark_methods(
         image_vectors,
         query_vectors,
         ids=image_ids,
         method_configs=method_configs,
-        top_k=_ensure_top_k(config.evaluation),
+        top_k=top_k,
         ground_truth=ground_truth,
         recall_points=config.evaluation.recall_at,
+    )
+    logger.info(
+        "Benchmark complete; collected {} result rows",
+        len(results),
     )
 
     for row in results:
         row.setdefault("num_queries", len(query_ids))
-        row.setdefault("top_k", _ensure_top_k(config.evaluation))
+        row.setdefault("top_k", top_k)
     return results
+
 
 
 def _results_table(rows: list[dict[str, Any]], settings: BenchmarkSettings) -> Table:
@@ -130,6 +220,8 @@ def _results_table(rows: list[dict[str, Any]], settings: BenchmarkSettings) -> T
 def _write_output(rows: list[dict[str, Any]], path: Path) -> None:
     import csv
 
+    logger.info("Writing benchmark summary to {}", path)
+
     path.parent.mkdir(parents=True, exist_ok=True)
     columns: list[str] = []
     for row in rows:
@@ -159,7 +251,13 @@ def app(config: DictConfig) -> list[dict[str, Any]]:
     """Hydra entry-point for ``python -m img_search.search.evaluate``."""
 
     parsed = _parse_config(config)
+    logger.info(
+        "Starting search evaluation | image_dataset={} | query_dataset={}",
+        _describe_spec(parsed.image_dataset),
+        _describe_spec(parsed.query_dataset),
+    )
     rows = run_search_evaluation(parsed)
+    logger.info("Search evaluation finished")
 
     console = Console()
     console.print(_results_table(rows, parsed.evaluation))
