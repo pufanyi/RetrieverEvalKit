@@ -19,7 +19,9 @@ def test_run_search_evaluation_from_disk(tmp_path) -> None:
     queries = np.eye(3, dtype="float32").tolist()
 
     gallery_path = _build_dataset(
-        tmp_path, "gallery", {"image_id": [f"img-{i}" for i in range(3)], "embedding": gallery_vectors}
+        tmp_path,
+        "gallery",
+        {"image_id": [f"img-{i}" for i in range(3)], "embedding": gallery_vectors},
     )
     query_path = _build_dataset(
         tmp_path,
@@ -45,7 +47,9 @@ def test_run_search_evaluation_from_disk(tmp_path) -> None:
             embedding_column="embedding",
             relevance_column="relevant_ids",
         ),
-        evaluation=BenchmarkSettings(methods=[{"method": "flat", "metric": "l2"}], top_k=1, recall_at=[1]),
+        evaluation=BenchmarkSettings(
+            methods=[{"method": "flat", "metric": "l2"}], top_k=1, recall_at=[1]
+        ),
     )
 
     results = run_search_evaluation(config)

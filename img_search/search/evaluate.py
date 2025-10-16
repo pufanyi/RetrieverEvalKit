@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
+
 from hydra import main as hydra_main
 from hydra.utils import get_original_cwd
 from omegaconf import DictConfig, OmegaConf
@@ -68,7 +70,7 @@ def run_search_evaluation(config: SearchEvalConfig) -> list[dict[str, Any]]:
         raw_truth = extract_relevance(
             query_dataset, relevance_column=config.query_dataset.relevance_column
         )
-        ground_truth = [value for value in raw_truth]
+        ground_truth = list(raw_truth)
 
     method_configs: list[FaissIndexConfig | dict[str, Any]] = []
     for method in config.evaluation.methods:
@@ -147,7 +149,9 @@ def _parse_config(config: DictConfig) -> SearchEvalConfig:
     image = EmbeddingDatasetSpec(**container["image_dataset"])
     query = QueryDatasetSpec(**container["query_dataset"])
     evaluation = BenchmarkSettings(**container.get("evaluation", {}))
-    return SearchEvalConfig(image_dataset=image, query_dataset=query, evaluation=evaluation)
+    return SearchEvalConfig(
+        image_dataset=image, query_dataset=query, evaluation=evaluation
+    )
 
 
 @hydra_main(version_base=None, config_path="../config/search_eval", config_name="eval")

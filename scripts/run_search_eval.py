@@ -3,6 +3,5 @@
 
 from img_search.search.evaluate import app
 
-
 if __name__ == "__main__":
     app()

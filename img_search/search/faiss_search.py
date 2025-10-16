@@ -14,9 +14,10 @@ accuracy when ground-truth neighbours are provided.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import time
-from typing import Any, Iterable, Mapping, Sequence, Literal
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any, Literal
 
 import numpy as np
 
@@ -26,6 +27,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency
     raise RuntimeError(
         "FAISS is required for img_search.search. Install `faiss-cpu` or `faiss-gpu`."
     ) from exc
+
 
 @dataclass(slots=True)
 class FaissIndexConfig:
@@ -95,7 +97,7 @@ class FaissIndexConfig:
                 self.gpu_device = 0
 
     @classmethod
-    def from_mapping(cls, mapping: Mapping[str, Any] | None) -> "FaissIndexConfig":
+    def from_mapping(cls, mapping: Mapping[str, Any] | None) -> FaissIndexConfig:
         if mapping is None:
             return cls()
         valid_keys = cls.__dataclass_fields__.keys()
@@ -105,7 +107,9 @@ class FaissIndexConfig:
 class FaissSearchIndex:
     """Wrapper around FAISS indexes supporting multiple search strategies."""
 
-    def __init__(self, dim: int, *, config: FaissIndexConfig | Mapping[str, Any] | None = None) -> None:
+    def __init__(
+        self, dim: int, *, config: FaissIndexConfig | Mapping[str, Any] | None = None
+    ) -> None:
         self.dim = int(dim)
         if self.dim <= 0:
             raise ValueError("dim must be > 0")
@@ -147,7 +151,9 @@ class FaissSearchIndex:
         self._label_lookup.clear()
         self._next_id = 0
 
-    def add_embeddings(self, ids: Sequence[str], embeddings: Iterable[np.ndarray | Sequence[float]]) -> None:
+    def add_embeddings(
+        self, ids: Sequence[str], embeddings: Iterable[np.ndarray | Sequence[float]]
+    ) -> None:
         ids = list(ids)
         vectors = _as_matrix(embeddings, dim=self.dim)
         if len(ids) != len(vectors):
@@ -223,7 +229,9 @@ class FaissSearchIndex:
             base_index = _flat_index(self.dim, metric_type)
         elif self.config.method == "ivf_flat":
             quantizer = _flat_index(self.dim, metric_type)
-            base_index = faiss.IndexIVFFlat(quantizer, self.dim, self.config.nlist, metric_type)
+            base_index = faiss.IndexIVFFlat(
+                quantizer, self.dim, self.config.nlist, metric_type
+            )
             base_index.nprobe = self.config.nprobe
         elif self.config.method == "ivf_pq":
             quantizer = _flat_index(self.dim, metric_type)
@@ -279,7 +287,9 @@ def benchmark_methods(
 
     results: list[dict[str, Any]] = []
 
-    recall_points = sorted({int(point) for point in recall_points or [] if int(point) > 0})
+    recall_points = sorted(
+        {int(point) for point in recall_points or [] if int(point) > 0}
+    )
 
     for cfg in method_configs:
         index_config = (
@@ -303,13 +313,15 @@ def benchmark_methods(
             per_query_results = hits  # type: ignore[assignment]
 
         accuracy = None
-        recall_totals: dict[int, float] = {k: 0.0 for k in recall_points}
-        recall_counts: dict[int, int] = {k: 0 for k in recall_points}
+        recall_totals: dict[int, float] = dict.fromkeys(recall_points, 0.0)
+        recall_counts: dict[int, int] = dict.fromkeys(recall_points, 0)
         if ground_truth is not None:
             if len(ground_truth) != len(per_query_results):
                 raise ValueError("ground_truth length must match number of queries")
             correct = 0
-            for expected, retrieved in zip(ground_truth, per_query_results, strict=True):
+            for expected, retrieved in zip(
+                ground_truth, per_query_results, strict=True
+            ):
                 expected_ids = _as_label_set(expected)
                 if any(hit["id"] in expected_ids for hit in retrieved):
                     correct += 1
@@ -387,7 +399,9 @@ def _as_matrix(
     if array.ndim != 2:
         raise ValueError("Expected 2D array of embeddings")
     if dim is not None and array.shape[1] != dim:
-        raise ValueError(f"Expected vectors of dimension {dim}, received {array.shape[1]}")
+        raise ValueError(
+            f"Expected vectors of dimension {dim}, received {array.shape[1]}"
+        )
     return array
 
 

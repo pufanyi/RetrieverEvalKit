@@ -1,7 +1,7 @@
 """Search utilities for evaluating retrieval backends."""
 
-from .faiss_search import FaissIndexConfig, FaissSearchIndex, benchmark_methods
 from .evaluate import BenchmarkSettings, SearchEvalConfig, app, run_search_evaluation
+from .faiss_search import FaissIndexConfig, FaissSearchIndex, benchmark_methods
 
 __all__ = [
     "FaissIndexConfig",
