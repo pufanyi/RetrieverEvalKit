@@ -1,15 +1,11 @@
-"""FAISS-based vector search utilities.
+"""Approximate nearest-neighbour search utilities.
 
-This module centralises FAISS index construction so experiments can compare
-multiple ANN strategies and measure their trade-offs.  The
-:class:`FaissSearchIndex` helper wraps common index types (flat, IVF, PQ and
-HNSW) and exposes a uniform interface for inserting embeddings and performing
-nearest-neighbour queries.  Callers can optionally mirror the index on GPU to
-benchmark CPU vs GPU throughput.
-
-The accompanying :func:`benchmark_methods` function streamlines evaluating a set
-of index configurations by collecting timing metrics and (optionally) top-k
-accuracy when ground-truth neighbours are provided.
+This module historically focused on FAISS integration but has since expanded to
+support multiple ANN backends (FAISS, ScaNN, and HNSWlib).  The
+:class:`FaissSearchIndex` helper still encapsulates FAISS configuration while
+the :func:`benchmark_methods` function dispatches to the appropriate backend
+based on each configuration entry.  Timing metrics and optional top-k accuracy
+scores are collected to make cross-backend comparisons straightforward.
 """
 
 from __future__ import annotations
@@ -28,6 +24,9 @@ except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency
     raise RuntimeError(
         "FAISS is required for img_search.search. Install `faiss-cpu` or `faiss-gpu`."
     ) from exc
+
+from img_search.search.hnswlib_search import HnswlibIndexConfig, HnswlibSearchIndex
+from img_search.search.scann_search import ScannIndexConfig, ScannSearchIndex
 
 
 def faiss_supports_gpu() -> bool:
@@ -292,17 +291,19 @@ def benchmark_methods(
     queries: Iterable[np.ndarray | Sequence[float]],
     *,
     ids: Sequence[str] | None = None,
-    method_configs: Sequence[FaissIndexConfig | Mapping[str, Any]],
+    method_configs: Sequence[
+        FaissIndexConfig | ScannIndexConfig | HnswlibIndexConfig | Mapping[str, Any]
+    ],
     top_k: int = 5,
     ground_truth: Sequence[Sequence[str] | str] | None = None,
     recall_points: Sequence[int] | None = None,
     progress: Progress | None = None,
 ) -> list[dict[str, Any]]:
-    """Benchmark multiple FAISS configurations on shared data.
+    """Benchmark multiple ANN configurations on shared data.
 
     When ``progress`` is provided, the function will update the task with
-    high-level progress for each FAISS configuration as it is prepared,
-    searched, and scored.
+    high-level progress for each configuration as it is prepared, searched, and
+    scored.
     """
 
     embeddings_matrix = _as_matrix(embeddings)
@@ -320,18 +321,61 @@ def benchmark_methods(
     method_task: TaskID | None = None
     if progress is not None:
         method_task = progress.add_task(
-            description="Benchmarking FAISS methods",
+            description="Benchmarking ANN methods",
             total=len(configs_list),
             visible=len(configs_list) > 0,
         )
 
     for cfg in configs_list:
-        index_config = (
-            FaissIndexConfig.from_mapping(cfg) if isinstance(cfg, Mapping) else cfg
-        )
-        index = FaissSearchIndex(embeddings_matrix.shape[1], config=index_config)
+        backend: str
+        label: str | None = None
+        if isinstance(cfg, FaissIndexConfig):
+            backend = "faiss"
+            index_config = cfg
+        elif isinstance(cfg, ScannIndexConfig):
+            backend = "scann"
+            index_config = cfg
+        elif isinstance(cfg, HnswlibIndexConfig):
+            backend = "hnswlib"
+            index_config = cfg
+        elif isinstance(cfg, Mapping):
+            backend = str(cfg.get("backend", "faiss")).lower()
+            if backend == "faiss":
+                index_config = FaissIndexConfig.from_mapping(cfg)
+            elif backend == "scann":
+                index_config = ScannIndexConfig.from_mapping(cfg)
+            elif backend == "hnswlib":
+                index_config = HnswlibIndexConfig.from_mapping(cfg)
+            else:
+                raise ValueError(
+                    "Unsupported ANN backend. "
+                    "Choose from 'faiss', 'scann', or 'hnswlib'."
+                )
+            raw_label = cfg.get("name") or cfg.get("method")
+            if raw_label is not None:
+                label = str(raw_label)
+        else:  # pragma: no cover - defensive guard
+            raise TypeError(
+                "method_configs entries must be mappings or recognised index configs"
+            )
 
-        method_label = f"{index_config.method} ({index_config.metric})"
+        if backend == "faiss":
+            index = FaissSearchIndex(embeddings_matrix.shape[1], config=index_config)
+            metric = index_config.metric
+            method_name = index_config.method
+            use_gpu = index_config.use_gpu
+        elif backend == "scann":
+            index = ScannSearchIndex(embeddings_matrix.shape[1], config=index_config)
+            metric = index_config.metric
+            method_name = label or "scann"
+            use_gpu = False
+        else:  # backend == "hnswlib"
+            index = HnswlibSearchIndex(embeddings_matrix.shape[1], config=index_config)
+            metric = index_config.metric
+            method_name = label or "hnswlib"
+            use_gpu = False
+
+        method_label = f"{backend}/{method_name} ({metric})"
         step_task: TaskID | None = None
         if progress is not None:
             step_task = progress.add_task(
@@ -374,9 +418,10 @@ def benchmark_methods(
         )
 
         row: dict[str, Any] = {
-            "method": index_config.method,
-            "metric": index_config.metric,
-            "use_gpu": index_config.use_gpu,
+            "backend": backend,
+            "method": method_name,
+            "metric": metric,
+            "use_gpu": use_gpu,
             "index_time": build_time,
             "search_time": search_time,
             "avg_query_time": search_time / len(per_query_results),
@@ -455,6 +500,7 @@ def benchmark_bruteforce(
         accuracy, recall_scores = _score_hits(hits, ground_truth, recall_points)
 
         row: dict[str, Any] = {
+            "backend": "bruteforce",
             "method": "bruteforce",
             "metric": metric,
             "use_gpu": False,
