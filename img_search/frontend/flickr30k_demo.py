@@ -237,9 +237,7 @@ class Flickr30kSearchEngine:
                 image_id = str(image_id_value) if image_id_value is not None else None
                 caption_text_value = row.get("caption")
                 caption_text = (
-                    None
-                    if caption_text_value is None
-                    else str(caption_text_value)
+                    None if caption_text_value is None else str(caption_text_value)
                 )
                 record = CaptionRecord(
                     id=caption_id,
@@ -454,9 +452,7 @@ class Flickr30kSearchEngine:
             "image_count": len(self._image_ids),
             "caption_count": len(self._caption_lookup),
             "image_root": (
-                str(self.settings.image_root)
-                if self.settings.image_root
-                else None
+                str(self.settings.image_root) if self.settings.image_root else None
             ),
             "image_pattern": self.settings.image_pattern,
             "methods": [
@@ -481,6 +477,8 @@ class Flickr30kSearchEngine:
             "default_top_k": self.settings.default_top_k,
             "max_top_k": self.settings.max_top_k,
         }
+
+
 class CaptionPreview(BaseModel):
     id: str
     caption: str | None = None
@@ -584,9 +582,7 @@ def create_app(settings: DemoSettings | None = None) -> FastAPI:
             caption=record.caption,
         )
 
-    @app.get(
-        "/api/images/{image_id}/captions", response_model=list[CaptionPreview]
-    )
+    @app.get("/api/images/{image_id}/captions", response_model=list[CaptionPreview])
     async def api_image_captions(image_id: str) -> list[CaptionPreview]:
         await engine.ensure_ready()
         records = engine.image_captions(image_id)
@@ -623,9 +619,7 @@ def create_app(settings: DemoSettings | None = None) -> FastAPI:
             try:
                 vector = engine.image_embedding(request.image_id)
             except KeyError as exc:  # pragma: no cover - runtime validation
-                raise HTTPException(
-                    status_code=404, detail="Image not found"
-                ) from exc
+                raise HTTPException(status_code=404, detail="Image not found") from exc
             query_summary = {
                 "mode": "image",
                 "id": request.image_id,
