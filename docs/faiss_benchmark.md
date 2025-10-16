@@ -35,6 +35,14 @@ ground-truth column.
 - **`evaluation/*.yaml`** – selects which FAISS methods to benchmark and whether
 to force GPU execution.
 
+Large corpora can overwhelm RAM when converted into dense NumPy arrays. Both the
+image and query dataset specs accept an optional `memmap_path` field; when set,
+`extract_embeddings` will materialise vectors into a NumPy `memmap` on disk
+instead of keeping them fully in memory. This allows benchmarks with millions of
+queries to run using bounded memory at the cost of additional disk I/O. Point
+`memmap_path` at a directory with sufficient free space and reuse the same path
+across runs to avoid repeatedly allocating new files.
+
 The default composition is described in `img_search/config/search_eval/eval.yaml`:
 
 ```yaml

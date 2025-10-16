@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import tempfile
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -24,6 +26,7 @@ class EmbeddingDatasetSpec:
     embedding_column: str = "embedding"
     metadata_columns: list[str] = field(default_factory=list)
     read_batch_size: int | None = None
+    memmap_path: str | None = None
 
     def __post_init__(self) -> None:
         if not self.dataset_name and not self.load_from_disk:
@@ -80,6 +83,7 @@ def extract_embeddings(
     id_column: str,
     embedding_column: str,
     batch_size: int | None = None,
+    memmap_path: str | Path | None = None,
 ) -> tuple[list[str], np.ndarray]:
     """Return IDs and vectors from a dataset containing embeddings."""
 
@@ -118,6 +122,38 @@ def extract_embeddings(
             raise ValueError("batch_size must be a positive integer")
         identifiers: list[str] = []
         batches: list[np.ndarray] = []
+        memmap: np.memmap | None = None
+        memmap_length: int | None = None
+        if memmap_path is not None:
+            try:
+                memmap_length = len(dataset)
+            except TypeError as exc:  # pragma: no cover - streaming datasets
+                raise TypeError(
+                    "memmap_path requires a dataset with a known length"
+                ) from exc
+            if memmap_length < 0:
+                raise ValueError("Dataset length must be non-negative")
+
+        def _ensure_memmap(total_rows: int, width: int) -> np.memmap:
+            nonlocal memmap
+            if memmap is not None:
+                return memmap
+            if memmap_path is None:
+                tmp = tempfile.NamedTemporaryFile(suffix=".memmap", delete=False)
+                path = Path(tmp.name)
+                tmp.close()
+            else:
+                path = Path(memmap_path)
+                path.parent.mkdir(parents=True, exist_ok=True)
+            memmap = np.memmap(
+                path,
+                mode="w+",
+                dtype="float32",
+                shape=(total_rows, width),
+            )
+            return memmap
+
+        offset = 0
         iterator = getattr(dataset, "iter", None)
         if callable(iterator):
             for batch in iterator(batch_size=batch_size):
@@ -125,7 +161,17 @@ def extract_embeddings(
                 batch_vectors = np.asarray(batch[embedding_column], dtype="float32")
                 if batch_vectors.ndim == 1:
                     batch_vectors = np.expand_dims(batch_vectors, axis=-1)
-                batches.append(batch_vectors)
+                if memmap_path is not None:
+                    if memmap_length is None:
+                        raise ValueError("Dataset length must be known for memmap")
+                    if batch_vectors.ndim != 2:
+                        raise ValueError("Embedding column must contain 2D vectors")
+                    mm = _ensure_memmap(memmap_length, batch_vectors.shape[1])
+                    stop = offset + batch_vectors.shape[0]
+                    mm[offset:stop] = batch_vectors
+                    offset = stop
+                else:
+                    batches.append(batch_vectors)
         else:
             total = len(dataset)
             for start in range(0, total, batch_size):
@@ -137,7 +183,18 @@ def extract_embeddings(
                 )
                 if batch_vectors.ndim == 1:
                     batch_vectors = np.expand_dims(batch_vectors, axis=-1)
-                batches.append(batch_vectors)
+                if memmap_path is not None:
+                    if batch_vectors.ndim != 2:
+                        raise ValueError("Embedding column must contain 2D vectors")
+                    mm = _ensure_memmap(total, batch_vectors.shape[1])
+                    mm[start:stop] = batch_vectors
+                else:
+                    batches.append(batch_vectors)
+        if memmap is not None:
+            if memmap_length is not None and offset != 0 and offset != memmap_length:
+                memmap = memmap[:offset]
+            memmap.flush()
+            return identifiers, memmap
         if not batches:
             return identifiers, _empty_embedding_matrix()
         vectors = np.concatenate(batches, axis=0)
