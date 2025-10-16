@@ -13,13 +13,11 @@ floats) and one column identifying each row. Query datasets may optionally
 include a relevance column that lists one or more matching image identifiers so
 recall and accuracy can be measured automatically.
 
-```
 | Column           | Required | Description                                    |
 |------------------|----------|------------------------------------------------|
 | `image_id`       | Yes      | Unique identifier or image path.               |
 | `embedding`      | Yes      | Embedding vector stored as a list of floats.   |
 | `relevant_ids`   | Optional | String or list of matching image identifiers.  |
-```
 
 You can author the datasets in any way that Hugging Face supports. For local
 experimentation, create them with `datasets.Dataset.from_dict` and
