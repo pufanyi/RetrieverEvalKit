@@ -787,6 +787,16 @@ HTML_TEMPLATE = """
     const formError = document.getElementById('formError');
     const captionPreview = document.getElementById('captionPreview');
 
+    function escapeHtml(unsafe) {
+      if (unsafe === null || unsafe === undefined) return '';
+      return String(unsafe)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
     async function loadStatus() {
       try {
         const response = await fetch('/api/status');
@@ -824,14 +834,14 @@ HTML_TEMPLATE = """
       if (data.sample_captions && data.sample_captions.length) {
         html += '<div style="margin-top:0.75rem"><strong>Sample caption IDs:</strong><ul style="margin:0.35rem 0 0 1.1rem; padding:0; list-style:disc;">';
         data.sample_captions.forEach((item) => {
-          html += `<li><code>${item.id}</code> → <code>${item.image_id ?? 'N/A'}</code> — ${item.caption ?? '(no text)'}</li>`;
+          html += `<li><code>${escapeHtml(item.id)}</code> → <code>${escapeHtml(item.image_id ?? 'N/A')}</code> — ${escapeHtml(item.caption ?? '(no text)')}</li>`;
         });
         html += '</ul></div>';
       }
       if (Object.keys(data.method_errors || {}).length) {
         html += '<div class="error" style="margin-top:0.75rem">Unavailable backends:<ul style="margin:0.35rem 0 0 1.1rem; padding:0; list-style:disc;">';
         for (const [key, value] of Object.entries(data.method_errors)) {
-          html += `<li><code>${key}</code> – ${value}</li>`;
+          html += `<li><code>${escapeHtml(key)}</code> – ${escapeHtml(value)}</li>`;
         }
         html += '</ul></div>';
       }
@@ -860,7 +870,7 @@ HTML_TEMPLATE = """
         }
         const data = await response.json();
         captionPreview.style.display = 'block';
-        captionPreview.innerHTML = `<strong>${data.id}</strong> → ${data.image_id ?? 'N/A'}<br/>${data.caption ?? '(no caption text)'}`;
+        captionPreview.innerHTML = `<strong>${escapeHtml(data.id)}</strong> → ${escapeHtml(data.image_id ?? 'N/A')}<br/>${escapeHtml(data.caption ?? '(no caption text)')}`;
       } catch (err) {
         captionPreview.style.display = 'block';
         captionPreview.textContent = err.message;
@@ -927,7 +937,7 @@ HTML_TEMPLATE = """
         if (hit.image_url) {
           const img = document.createElement('img');
           img.src = hit.image_url;
-          img.alt = hit.caption || hit.id;
+          img.alt = escapeHtml(hit.caption || hit.id);
           card.appendChild(img);
         } else {
           const placeholder = document.createElement('div');
@@ -941,16 +951,16 @@ HTML_TEMPLATE = """
 
         const meta = document.createElement('div');
         meta.className = 'result-meta';
-        meta.innerHTML = `<h3>#${hit.rank} · ${hit.id}</h3>` +
-          `<div class="metric">metric: ${hit.metric} · score: ${hit.score.toFixed(4)} · raw: ${hit.distance.toFixed(4)}</div>` +
-          (hit.caption ? `<p style="margin:0.6rem 0 0 0;">${hit.caption}</p>` : '');
+        meta.innerHTML = `<h3>#${hit.rank} · ${escapeHtml(hit.id)}</h3>` +
+          `<div class="metric">metric: ${escapeHtml(hit.metric)} · score: ${hit.score.toFixed(4)} · raw: ${hit.distance.toFixed(4)}</div>` +
+          (hit.caption ? `<p style="margin:0.6rem 0 0 0;">${escapeHtml(hit.caption)}</p>` : '');
 
         if (hit.captions && hit.captions.length) {
           const list = document.createElement('ul');
           list.className = 'caption-list';
           hit.captions.forEach((entry) => {
             const item = document.createElement('li');
-            item.innerHTML = `<code>${entry.id}</code> — ${entry.caption ?? '(no text)'}`;
+            item.innerHTML = `<code>${escapeHtml(entry.id)}</code> — ${escapeHtml(entry.caption ?? '(no text)')}`;
             list.appendChild(item);
           });
           meta.appendChild(list);
