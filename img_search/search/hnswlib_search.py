@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any
 
 import numpy as np
 
@@ -95,7 +96,8 @@ class HnswlibSearchIndex:
     def _require_index(self) -> None:
         if hnswlib is None:  # pragma: no cover - optional dependency
             raise RuntimeError(
-                "HNSWlib is required for HnswlibSearchIndex. Install the 'hnswlib' package."
+                "HNSWlib is required for HnswlibSearchIndex. "
+                "Install the 'hnswlib' package."
             )
 
     def _space(self) -> str:
@@ -167,4 +169,3 @@ def hnswlib_available() -> bool:
 
 
 __all__ = ["HnswlibIndexConfig", "HnswlibSearchIndex", "hnswlib_available"]
-

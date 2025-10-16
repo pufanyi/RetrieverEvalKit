@@ -292,10 +292,7 @@ def benchmark_methods(
     *,
     ids: Sequence[str] | None = None,
     method_configs: Sequence[
-        FaissIndexConfig
-        | ScannIndexConfig
-        | HnswlibIndexConfig
-        | Mapping[str, Any]
+        FaissIndexConfig | ScannIndexConfig | HnswlibIndexConfig | Mapping[str, Any]
     ],
     top_k: int = 5,
     ground_truth: Sequence[Sequence[str] | str] | None = None,
@@ -351,7 +348,8 @@ def benchmark_methods(
                 index_config = HnswlibIndexConfig.from_mapping(cfg)
             else:
                 raise ValueError(
-                    "Unsupported ANN backend. Choose from 'faiss', 'scann', or 'hnswlib'."
+                    "Unsupported ANN backend. "
+                    "Choose from 'faiss', 'scann', or 'hnswlib'."
                 )
             raw_label = cfg.get("name") or cfg.get("method")
             if raw_label is not None:

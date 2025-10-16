@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any
 
 import numpy as np
 
@@ -216,4 +217,3 @@ def scann_available() -> bool:
 
 
 __all__ = ["ScannIndexConfig", "ScannSearchIndex", "scann_available"]
-

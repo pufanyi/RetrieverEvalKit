@@ -118,14 +118,16 @@ def _expand_method_configs(
                 if gpu_available:
                     expanded.append({**override, "use_gpu": True})
             else:
-                expanded.append({**override, "use_gpu": bool(use_gpu and gpu_available)})
+                expanded.append(
+                    {**override, "use_gpu": bool(use_gpu and gpu_available)}
+                )
         else:
             expanded.append({**override, "use_gpu": False})
     return expanded
 
 
 def _backend_name(
-    cfg: FaissIndexConfig | ScannIndexConfig | HnswlibIndexConfig | Mapping[str, Any]
+    cfg: FaissIndexConfig | ScannIndexConfig | HnswlibIndexConfig | Mapping[str, Any],
 ) -> str:
     if isinstance(cfg, FaissIndexConfig):
         return "faiss"
@@ -316,8 +318,10 @@ def run_search_evaluation(config: SearchEvalConfig) -> list[dict[str, Any]]:
         len(results),
     )
 
-    def _metric_value(cfg: FaissIndexConfig | ScannIndexConfig | HnswlibIndexConfig | dict[str, Any]) -> str:
-        if isinstance(cfg, (FaissIndexConfig, ScannIndexConfig, HnswlibIndexConfig)):
+    def _metric_value(
+        cfg: FaissIndexConfig | ScannIndexConfig | HnswlibIndexConfig | dict[str, Any],
+    ) -> str:
+        if isinstance(cfg, FaissIndexConfig | ScannIndexConfig | HnswlibIndexConfig):
             return str(cfg.metric).lower()
         return str(cfg.get("metric", "l2")).lower()
 
