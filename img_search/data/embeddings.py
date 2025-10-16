@@ -94,11 +94,15 @@ def extract_embeddings(
                 width = length
             else:
                 shape = getattr(column_feature, "shape", None)
-                if isinstance(shape, (tuple, list)) and shape:
+                if isinstance(shape, tuple | list) and shape:
                     last_axis = shape[-1]
                     if isinstance(last_axis, int):
                         width = last_axis
-        if width is None and column_feature is not None and hasattr(column_feature, "dtype"):
+        if (
+            width is None
+            and column_feature is not None
+            and hasattr(column_feature, "dtype")
+        ):
             width = 1
         if width is None:
             width = 0
@@ -128,7 +132,9 @@ def extract_embeddings(
                 stop = min(start + batch_size, total)
                 slice_batch = dataset[start:stop]
                 identifiers.extend(str(value) for value in slice_batch[id_column])
-                batch_vectors = np.asarray(slice_batch[embedding_column], dtype="float32")
+                batch_vectors = np.asarray(
+                    slice_batch[embedding_column], dtype="float32"
+                )
                 if batch_vectors.ndim == 1:
                     batch_vectors = np.expand_dims(batch_vectors, axis=-1)
                 batches.append(batch_vectors)

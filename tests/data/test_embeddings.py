@@ -16,11 +16,15 @@ def _build_dataset(num_rows: int = 4, dim: int = 3) -> Dataset:
 def test_extract_embeddings_default_batch():
     dataset = _build_dataset(num_rows=3, dim=2)
 
-    ids, vectors = extract_embeddings(dataset, id_column="id", embedding_column="embedding")
+    ids, vectors = extract_embeddings(
+        dataset, id_column="id", embedding_column="embedding"
+    )
 
     assert ids == ["0", "1", "2"]
     assert vectors.shape == (3, 2)
-    np.testing.assert_allclose(vectors, np.asarray([[0.0, 1.0], [1.0, 2.0], [2.0, 3.0]], dtype="float32"))
+    np.testing.assert_allclose(
+        vectors, np.asarray([[0.0, 1.0], [1.0, 2.0], [2.0, 3.0]], dtype="float32")
+    )
 
 
 def test_extract_embeddings_streaming_batches():
@@ -36,7 +40,9 @@ def test_extract_embeddings_streaming_batches():
     assert ids == ["0", "1", "2", "3", "4"]
     assert vectors.shape == (5, 3)
     for index, expected in enumerate(dataset["embedding"]):
-        np.testing.assert_allclose(vectors[index], np.asarray(expected, dtype="float32"))
+        np.testing.assert_allclose(
+            vectors[index], np.asarray(expected, dtype="float32")
+        )
 
 
 def test_extract_embeddings_rejects_invalid_batch_size():
