@@ -124,6 +124,7 @@ def run_search_evaluation(config: SearchEvalConfig) -> list[dict[str, Any]]:
         id_column=config.image_dataset.id_column,
         embedding_column=config.image_dataset.embedding_column,
         batch_size=config.image_dataset.read_batch_size,
+        memmap_path=config.image_dataset.memmap_path,
     )
     image_dim = image_vectors.shape[1] if image_vectors.ndim == 2 else "unknown"
     logger.info(
@@ -142,6 +143,7 @@ def run_search_evaluation(config: SearchEvalConfig) -> list[dict[str, Any]]:
         id_column=config.query_dataset.id_column,
         embedding_column=config.query_dataset.embedding_column,
         batch_size=config.query_dataset.read_batch_size,
+        memmap_path=config.query_dataset.memmap_path,
     )
     query_dim = query_vectors.shape[1] if query_vectors.ndim == 2 else "unknown"
     logger.info(
