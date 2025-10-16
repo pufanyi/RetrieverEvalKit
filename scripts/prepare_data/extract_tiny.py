@@ -9,7 +9,9 @@ from datasets import load_dataset
 def get_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
-        description=("Create and upload a tiny subset of a dataset from Hugging Face Hub."),
+        description=(
+            "Create and upload a tiny subset of a dataset from Hugging Face Hub."
+        ),
     )
     parser.add_argument(
         "--repo-id",
