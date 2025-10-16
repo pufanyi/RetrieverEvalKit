@@ -9,7 +9,7 @@ from datasets import load_dataset
 def get_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
-        description="Create and upload a tiny subset of a dataset from Hugging Face Hub."
+        description=("Create and upload a tiny subset of a dataset from Hugging Face Hub."),
     )
     parser.add_argument(
         "--repo-id",
@@ -57,14 +57,12 @@ def main() -> None:
     )
     args = get_args()
 
-    logging.info(
-        "Loading '%s' config from %s...", args.source_config, args.repo_id
-    )
-    full_ds = load_dataset(args.repo_id, name=args.source_config, token=args.token)["train"]
+    logging.info("Loading '%s' config from %s...", args.source_config, args.repo_id)
+    full_ds = load_dataset(args.repo_id, name=args.source_config, token=args.token)[
+        "train"
+    ]
 
-    logging.info(
-        "Creating a tiny subset of %d samples...", args.num_samples
-    )
+    logging.info("Creating a tiny subset of %d samples...", args.num_samples)
     tiny_ds = full_ds.shuffle(seed=args.seed).select(range(args.num_samples))
 
     logging.info("Uploading '%s' config to %s...", args.target_config, args.repo_id)
