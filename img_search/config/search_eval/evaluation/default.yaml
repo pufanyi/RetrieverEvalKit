@@ -1,0 +1,15 @@
+methods:
+  - method: flat
+    metric: cosine
+  - method: ivf_flat
+    metric: cosine
+    nlist: 2048
+    nprobe: 64
+  - method: hnsw
+    metric: cosine
+    hnsw_m: 32
+    ef_search: 128
+top_k: 100
+recall_at: [1, 5, 10, 50]
+use_gpu: null
+output_path: outputs/faiss_benchmark.csv
