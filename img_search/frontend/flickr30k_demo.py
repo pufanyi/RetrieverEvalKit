@@ -191,7 +191,7 @@ class Flickr30kSearchEngine:
         self,
         *,
         method_filter: Iterable[str] | None = None,
-        load_captions: bool = True,
+        load_captions: bool = False,
         progress_callback: Callable[[float, str, float], None] | None = None,
     ) -> dict[str, float]:
         start_time = time.perf_counter()
@@ -687,7 +687,11 @@ def _format_caption_option(record: Mapping[str, Any]) -> str:
     return f"{record['id']} · Image {image_id} · {preview}"
 
 
-def _render_sidebar(status: Mapping[str, Any]) -> tuple[int, str]:
+def _render_sidebar(
+    status: Mapping[str, Any],
+    *,
+    caption_enabled: bool,
+) -> tuple[int, str]:
     st.sidebar.header("Retrieval Settings")
     if not status.get("ready"):
         st.sidebar.info("Select a method tab and click Load to initialise an index.")
@@ -707,9 +711,13 @@ def _render_sidebar(status: Mapping[str, Any]) -> tuple[int, str]:
         step=1,
     )
 
+    options: list[str] = ["text", "image"]
+    if caption_enabled:
+        options.append("caption")
+
     query_mode = st.sidebar.radio(
         "Query Mode",
-        options=("text", "image", "caption"),
+        options=tuple(options),
         format_func=lambda mode: {
             "text": "Text",
             "image": "Image",
@@ -717,6 +725,11 @@ def _render_sidebar(status: Mapping[str, Any]) -> tuple[int, str]:
         }[mode],
         horizontal=True,
     )
+
+    if not caption_enabled:
+        st.sidebar.caption(
+            "Caption search disabled to avoid loading large caption embeddings."
+        )
 
     st.sidebar.markdown("---")
     st.sidebar.caption(
@@ -762,6 +775,10 @@ def _execute_search(
         caption_id = (query_inputs.get("caption_id") or "").strip()
         if not caption_id:
             raise ValueError("Please select or enter a caption ID")
+        if not engine.status().get("caption_embeddings_loaded"):
+            raise ValueError(
+                "Caption search is disabled because caption embeddings remain unloaded."
+            )
         vector, record = engine.caption_embedding(caption_id)
         summary = {
             "mode": "caption",
@@ -872,7 +889,7 @@ def main() -> None:
             try:
                 engine.prepare(
                     method_filter=[],
-                    load_captions=True,
+                    load_captions=False,
                     progress_callback=on_progress,
                 )
                 progress_queue.put(("encoder", None))
@@ -944,7 +961,11 @@ def main() -> None:
     dataset_info = status.get("image_dataset") or {}
     caption_loaded = bool(status.get("caption_embeddings_loaded"))
     with overview_col1:
-        caption_status = "ready" if caption_loaded else "will load on demand"
+        caption_status = (
+            "ready"
+            if caption_loaded
+            else "disabled · caption embeddings stay unloaded"
+        )
         st.markdown(
             "## Quick Start\n"
             "- **Image embeddings**: cached and ready for index builds.\n"
@@ -962,11 +983,12 @@ def main() -> None:
         )
     if not caption_loaded:
         st.info(
-            "Caption embeddings load the first time you search by caption, "
-            "keeping startup lightweight."
+            "Caption search is disabled here to avoid loading the large caption embedding matrix."
         )
 
-    top_k, query_mode = _render_sidebar(status)
+    top_k, query_mode = _render_sidebar(
+        status, caption_enabled=caption_loaded
+    )
 
     method_specs = list(_DEFAULT_METHODS)
     tab_labels = [str(spec["label"]) for spec in method_specs]
@@ -1017,6 +1039,7 @@ def main() -> None:
                     with st.spinner("Loading vector index..."):
                         timings = engine.prepare(
                             method_filter=[method_id],
+                            load_captions=False,
                             progress_callback=on_progress,
                         )
                 except Exception as exc:  # pragma: no cover - interactive feedback
