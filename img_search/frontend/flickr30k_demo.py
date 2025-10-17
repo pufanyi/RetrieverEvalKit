@@ -785,7 +785,7 @@ def main() -> None:
 
     samples = status.get("sample_captions", [])
 
-    for spec, tab in zip(method_specs, tabs, strict=False):
+    for spec, tab in zip(method_specs, tabs, strict=True):
         method_id = str(spec["id"])
         label = str(spec["label"])
         backend_name = str(spec.get("backend", "")).upper()
