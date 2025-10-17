@@ -5,7 +5,8 @@ import os
 import sys
 import textwrap
 import threading
-from collections.abc import Mapping
+import time
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -92,6 +93,10 @@ _DEFAULT_METHODS: tuple[dict[str, Any], ...] = (
     },
 )
 
+_DEFAULT_METHOD_MAP: dict[str, dict[str, Any]] = {
+    str(method["id"]): method for method in _DEFAULT_METHODS
+}
+
 
 @dataclass(slots=True)
 class DemoSettings:
@@ -174,98 +179,191 @@ class Flickr30kSearchEngine:
         self._backends: dict[str, BackendInfo] = {}
         self._backend_errors: dict[str, str] = {}
 
+        self._data_loaded = False
         self.serve_images = False
 
     @property
     def is_ready(self) -> bool:
         return self._ready
 
-    def prepare(self) -> None:
-        if self._ready:
-            return
-        with self._build_lock:
-            if self._ready:
-                return
+    def prepare(
+        self,
+        *,
+        method_filter: Iterable[str] | None = None,
+        progress_callback: Callable[[float, str, float], None] | None = None,
+    ) -> dict[str, float]:
+        start_time = time.perf_counter()
+        timings: dict[str, float] = {}
 
-            logger.info(
-                "Loading Flickr30k image embeddings: {}",
-                self.settings.image_dataset,
-            )
-            image_dataset = load_embedding_dataset(self.settings.image_dataset)
-            image_ids, image_vectors = extract_embeddings(
-                image_dataset,
-                id_column=self.settings.image_dataset.id_column,
-                embedding_column=self.settings.image_dataset.embedding_column,
-            )
-            if image_vectors.ndim != 2:
-                raise RuntimeError("Image embedding matrix must be 2-dimensional")
-            self._image_ids = [str(identifier) for identifier in image_ids]
-            self._image_vectors = np.asarray(image_vectors, dtype="float32")
-            self._image_lookup = {
-                identifier: index for index, identifier in enumerate(self._image_ids)
-            }
-            logger.info(
-                "Loaded {} image embeddings (dim={})",
-                len(self._image_ids),
-                self._image_vectors.shape[1],
-            )
-
-            logger.info(
-                "Loading Flickr30k caption embeddings: {}",
-                self.settings.caption_dataset,
-            )
-            caption_dataset = load_embedding_dataset(self.settings.caption_dataset)
-            caption_ids, caption_vectors = extract_embeddings(
-                caption_dataset,
-                id_column=self.settings.caption_dataset.id_column,
-                embedding_column=self.settings.caption_dataset.embedding_column,
-            )
-            if caption_vectors.ndim != 2:
-                raise RuntimeError("Caption embedding matrix must be 2-dimensional")
-            self._caption_vectors = np.asarray(caption_vectors, dtype="float32")
-            self._caption_lookup = {
-                str(identifier): index for index, identifier in enumerate(caption_ids)
-            }
-            logger.info(
-                "Loaded {} caption embeddings (dim={})",
-                len(self._caption_lookup),
-                self._caption_vectors.shape[1],
-            )
-
-            self._caption_metadata.clear()
-            self._image_captions.clear()
-            for row in caption_dataset:
-                raw_id = row.get(self.settings.caption_dataset.id_column)
-                if raw_id is None:
-                    continue
-                caption_id = str(raw_id)
-                image_id_value = row.get("image_id")
-                image_id = str(image_id_value) if image_id_value is not None else None
-                caption_text_value = row.get("caption")
-                caption_text = (
-                    None if caption_text_value is None else str(caption_text_value)
-                )
-                record = CaptionRecord(
-                    id=caption_id,
-                    image_id=image_id,
-                    caption=caption_text,
-                )
-                self._caption_metadata[caption_id] = record
-                if image_id:
-                    bucket = self._image_captions.setdefault(image_id, [])
-                    bucket.append(record)
-
-            sample_ids = list(self._caption_lookup.keys())[:5]
-            self._caption_samples = [
-                self._caption_metadata[cid]
-                for cid in sample_ids
-                if cid in self._caption_metadata
+        if method_filter is None:
+            requested_ids = {str(method["id"]) for method in _DEFAULT_METHODS}
+        else:
+            requested_ids = {str(identifier) for identifier in method_filter}
+            unknown = [
+                identifier for identifier in requested_ids if identifier not in _DEFAULT_METHOD_MAP
             ]
+            if unknown:
+                raise KeyError(
+                    "Unknown backend identifiers: {}".format(
+                        ", ".join(sorted(unknown))
+                    )
+                )
+
+        if method_filter is None:
+            ordered_ids = [str(method["id"]) for method in _DEFAULT_METHODS]
+        else:
+            ordered_ids = []
+            for method in _DEFAULT_METHODS:
+                identifier = str(method["id"])
+                if identifier in requested_ids:
+                    ordered_ids.append(identifier)
+
+        with self._build_lock:
+            pending_backends = [
+                identifier for identifier in ordered_ids if identifier not in self._backends
+            ]
+            dataset_steps = 3 if not self._data_loaded else 0
+            total_steps = dataset_steps + len(pending_backends)
+
+            if total_steps == 0:
+                if progress_callback:
+                    progress_callback(
+                        1.0,
+                        "Vector index already available",
+                        time.perf_counter() - start_time,
+                    )
+                timings["total"] = 0.0
+                return timings
+
+            completed_steps = 0
+
+            def notify(fraction: float, message: str) -> None:
+                if progress_callback:
+                    fraction = max(0.0, min(1.0, fraction))
+                    progress_callback(
+                        fraction,
+                        message,
+                        time.perf_counter() - start_time,
+                    )
+
+            if not self._data_loaded:
+                notify(0.0, "Loading Flickr30k image embeddings...")
+                step_start = time.perf_counter()
+                logger.info(
+                    "Loading Flickr30k image embeddings: {}",
+                    self.settings.image_dataset,
+                )
+                image_dataset = load_embedding_dataset(self.settings.image_dataset)
+                image_ids, image_vectors = extract_embeddings(
+                    image_dataset,
+                    id_column=self.settings.image_dataset.id_column,
+                    embedding_column=self.settings.image_dataset.embedding_column,
+                )
+                if image_vectors.ndim != 2:
+                    raise RuntimeError("Image embedding matrix must be 2-dimensional")
+                self._image_ids = [str(identifier) for identifier in image_ids]
+                self._image_vectors = np.asarray(image_vectors, dtype="float32")
+                self._image_lookup = {
+                    identifier: index for index, identifier in enumerate(self._image_ids)
+                }
+                timings["load_image_embeddings"] = time.perf_counter() - step_start
+                completed_steps += 1
+                notify(completed_steps / total_steps, "Image embeddings ready")
+                logger.info(
+                    "Loaded {} image embeddings (dim={})",
+                    len(self._image_ids),
+                    self._image_vectors.shape[1],
+                )
+
+                notify(completed_steps / total_steps, "Loading Flickr30k caption embeddings...")
+                step_start = time.perf_counter()
+                logger.info(
+                    "Loading Flickr30k caption embeddings: {}",
+                    self.settings.caption_dataset,
+                )
+                caption_dataset = load_embedding_dataset(self.settings.caption_dataset)
+                caption_ids, caption_vectors = extract_embeddings(
+                    caption_dataset,
+                    id_column=self.settings.caption_dataset.id_column,
+                    embedding_column=self.settings.caption_dataset.embedding_column,
+                )
+                if caption_vectors.ndim != 2:
+                    raise RuntimeError("Caption embedding matrix must be 2-dimensional")
+                self._caption_vectors = np.asarray(caption_vectors, dtype="float32")
+                self._caption_lookup = {
+                    str(identifier): index
+                    for index, identifier in enumerate(caption_ids)
+                }
+                timings["load_caption_embeddings"] = (
+                    time.perf_counter() - step_start
+                )
+                completed_steps += 1
+                notify(
+                    completed_steps / total_steps,
+                    "Caption embeddings ready",
+                )
+                logger.info(
+                    "Loaded {} caption embeddings (dim={})",
+                    len(self._caption_lookup),
+                    self._caption_vectors.shape[1],
+                )
+
+                notify(
+                    completed_steps / total_steps,
+                    "Preparing caption metadata...",
+                )
+                step_start = time.perf_counter()
+                self._caption_metadata.clear()
+                self._image_captions.clear()
+                for row in caption_dataset:
+                    raw_id = row.get(self.settings.caption_dataset.id_column)
+                    if raw_id is None:
+                        continue
+                    caption_id = str(raw_id)
+                    image_id_value = row.get("image_id")
+                    image_id = (
+                        str(image_id_value) if image_id_value is not None else None
+                    )
+                    caption_text_value = row.get("caption")
+                    caption_text = (
+                        None if caption_text_value is None else str(caption_text_value)
+                    )
+                    record = CaptionRecord(
+                        id=caption_id,
+                        image_id=image_id,
+                        caption=caption_text,
+                    )
+                    self._caption_metadata[caption_id] = record
+                    if image_id:
+                        bucket = self._image_captions.setdefault(image_id, [])
+                        bucket.append(record)
+
+                sample_ids = list(self._caption_lookup.keys())[:5]
+                self._caption_samples = [
+                    self._caption_metadata[cid]
+                    for cid in sample_ids
+                    if cid in self._caption_metadata
+                ]
+                timings["prepare_caption_metadata"] = (
+                    time.perf_counter() - step_start
+                )
+                completed_steps += 1
+                notify(completed_steps / total_steps, "Caption metadata prepared")
+                self._data_loaded = True
+                self._ready = True
+                logger.info("Flickr30k embeddings loaded")
+
+            if self._image_vectors is None:
+                raise RuntimeError("Image embeddings are not loaded")
 
             dim = int(self._image_vectors.shape[1])
-            self._backends.clear()
-            self._backend_errors.clear()
-            for method in _DEFAULT_METHODS:
+            for method_id in ordered_ids:
+                if method_id not in pending_backends:
+                    continue
+                method = _DEFAULT_METHOD_MAP[method_id]
+                label = str(method["label"])
+                notify(completed_steps / total_steps, f"Building {label}...")
+                step_start = time.perf_counter()
                 config = dict(method["config"])
                 metric = str(config.get("metric", "l2")).lower()
                 try:
@@ -275,21 +373,24 @@ class Flickr30kSearchEngine:
                         config=config,
                     )
                 except Exception as exc:  # pragma: no cover - startup logging
-                    identifier = str(method["id"])
                     logger.warning(
                         "Skipping backend {} due to error: {}",
-                        identifier,
+                        method_id,
                         exc,
                     )
-                    self._backend_errors[identifier] = str(exc)
+                    self._backend_errors[method_id] = str(exc)
+                    timings[f"build_{method_id}"] = time.perf_counter() - step_start
+                    completed_steps += 1
+                    notify(
+                        completed_steps / total_steps,
+                        f"Failed to initialise {label}",
+                    )
                     continue
 
                 backend.add_embeddings(self._image_ids, self._image_vectors)
-                identifier = str(method["id"])
-                label = str(method["label"])
                 supports_similarity = metric in {"ip", "cosine"}
-                self._backends[identifier] = BackendInfo(
-                    identifier=identifier,
+                self._backends[method_id] = BackendInfo(
+                    identifier=method_id,
                     label=label,
                     backend=str(method["backend"]),
                     metric=metric,
@@ -297,15 +398,32 @@ class Flickr30kSearchEngine:
                     searcher=backend,
                     supports_similarity=supports_similarity,
                 )
-                logger.info("Built {} backend ({})", identifier, label)
+                self._backend_errors.pop(method_id, None)
+                timings[f"build_{method_id}"] = time.perf_counter() - step_start
+                completed_steps += 1
+                notify(completed_steps / total_steps, f"{label} ready")
+                logger.info("Built {} backend ({})", method_id, label)
 
-            if not self._backends:
-                raise RuntimeError(
-                    "No retrieval backends were successfully initialised."
-                )
+            if method_filter is None:
+                if not self._backends:
+                    raise RuntimeError(
+                        "No retrieval backends were successfully initialised."
+                    )
+            else:
+                missing = [mid for mid in ordered_ids if mid not in self._backends]
+                if missing:
+                    details = ", ".join(
+                        f"{mid}: {self._backend_errors.get(mid, 'Unknown error')}"
+                        for mid in missing
+                    )
+                    raise RuntimeError(
+                        f"Failed to initialise requested backends: {details}"
+                    )
 
-            self._ready = True
-            logger.info("Flickr30k demo initialisation complete")
+            notify(1.0, "Flickr30k demo initialisation complete")
+
+        timings["total"] = time.perf_counter() - start_time
+        return timings
 
     def _build_backend(
         self, *, backend: str, dim: int, config: Mapping[str, Any]
@@ -487,11 +605,9 @@ class Flickr30kSearchEngine:
         }
 
 
-@st.cache_resource(show_spinner="Loading vector index...")
+@st.cache_resource()
 def load_engine(settings: DemoSettings | None = None) -> Flickr30kSearchEngine:
-    engine = Flickr30kSearchEngine(settings or DemoSettings())
-    engine.prepare()
-    return engine
+    return Flickr30kSearchEngine(settings or DemoSettings())
 
 
 def _format_caption_option(record: Mapping[str, Any]) -> str:
@@ -501,16 +617,17 @@ def _format_caption_option(record: Mapping[str, Any]) -> str:
     return f"{record['id']} · Image {image_id} · {preview}"
 
 
-def _render_sidebar(status: Mapping[str, Any]) -> tuple[str, int, str]:
+def _render_sidebar(status: Mapping[str, Any]) -> tuple[int, str]:
     st.sidebar.header("Retrieval Settings")
-    backend_labels = {
-        method["id"]: method["label"] for method in status.get("methods", [])
-    }
-    backend_id = st.sidebar.selectbox(
-        "Vector Retrieval Algorithm",
-        options=list(backend_labels.keys()) or ["faiss_flat"],
-        format_func=lambda value: backend_labels.get(value, value),
-    )
+    if not status.get("ready"):
+        st.sidebar.info("Select a method tab and click Load to initialise an index.")
+    else:
+        loaded_methods = status.get("methods", [])
+        if loaded_methods:
+            summary = ", ".join(
+                method.get("label", method.get("id", "")) for method in loaded_methods
+            )
+            st.sidebar.caption(f"Loaded backends: {summary}")
 
     top_k = st.sidebar.slider(
         "Number of results",
@@ -541,7 +658,7 @@ def _render_sidebar(status: Mapping[str, Any]) -> tuple[str, int, str]:
             for key, message in status["method_errors"].items():
                 st.warning(f"{key}: {message}")
 
-    return backend_id, top_k, query_mode
+    return top_k, query_mode
 
 
 def _execute_search(
@@ -648,67 +765,174 @@ def main() -> None:
     st.title("🔍 Flickr30k Image Search")
     st.caption("Fast vector retrieval experience with Jina v4 encoder")
 
+    st.session_state.setdefault("backend_timings", {})
+
     engine = load_engine()
     status = engine.status()
 
     stats_col1, stats_col2, stats_col3 = st.columns(3)
     stats_col1.metric("Image Count", f"{status.get('image_count', 0):,}")
     stats_col2.metric("Caption Count", f"{status.get('caption_count', 0):,}")
-    stats_col3.metric("Optional Backends", f"{len(status.get('methods', []))}")
+    stats_col3.metric("Loaded Backends", f"{len(status.get('methods', []))}")
 
-    backend_id, top_k, query_mode = _render_sidebar(status)
+    top_k, query_mode = _render_sidebar(status)
+
+    method_specs = list(_DEFAULT_METHODS)
+    tab_labels = [str(spec["label"]) for spec in method_specs]
+    tabs = st.tabs(tab_labels)
 
     samples = status.get("sample_captions", [])
-    query_inputs: dict[str, Any] = {}
 
-    with st.form("search_form", clear_on_submit=False):
-        st.subheader("Enter Query")
-        if query_mode == "text":
-            query_inputs["query"] = st.text_area(
-                "Please enter the text description to retrieve",
-                placeholder="A golden retriever running on the grass",
+    for spec, tab in zip(method_specs, tabs):
+        method_id = str(spec["id"])
+        label = str(spec["label"])
+        backend_name = str(spec.get("backend", "")).upper()
+        metric = str(spec.get("config", {}).get("metric", "l2"))
+
+        with tab:
+            st.markdown(f"### {label}")
+            st.caption(f"{backend_name} · Metric: {metric}")
+
+            method_ready = any(
+                info.get("id") == method_id for info in status.get("methods", [])
             )
-        elif query_mode == "image":
-            query_inputs["image_id"] = st.text_input(
-                "Please enter an image ID",
-                placeholder="Example: 1000092795",
+            method_error = status.get("method_errors", {}).get(method_id)
+
+            if method_ready:
+                st.success("Vector index ready.")
+            elif method_error:
+                st.warning(f"Last load failed: {method_error}")
+            else:
+                st.info("Vector index not loaded yet.")
+
+            load_clicked = st.button(
+                "Load vector index",
+                key=f"load_backend_{method_id}",
+                use_container_width=True,
             )
-        else:
-            selected_id = ""
-            if samples:
-                labels = [_format_caption_option(item) for item in samples]
-                selected_label = st.selectbox("Select sample caption", labels)
-                selected_index = labels.index(selected_label)
-                selected_id = samples[selected_index]["id"]
-                st.caption("You can also enter a caption ID below to override.")
-            manual_id = st.text_input("Caption ID", value="")
-            query_inputs["caption_id"] = manual_id.strip() or selected_id
 
-        submitted = st.form_submit_button("Start Search", use_container_width=True)
-
-    if submitted:
-        try:
-            with st.spinner("Searching..."):
-                summary, backend_info, results = _execute_search(
-                    engine,
-                    backend_id=backend_id,
-                    top_k=top_k,
-                    query_mode=query_mode,
-                    query_inputs=query_inputs,
+            if load_clicked:
+                progress_placeholder = st.empty()
+                status_placeholder = st.empty()
+                progress_bar = progress_placeholder.progress(
+                    0.0, text="Preparing resources..."
                 )
-        except KeyError as exc:
-            st.error(f"Could not find the specified ID: {exc}")
-            logger.exception("Missing identifier")
-            return
-        except ValueError as exc:
-            st.warning(str(exc))
-            return
-        except Exception as exc:  # pragma: no cover - interactive feedback
-            st.error(f"An error occurred during the search process: {exc}")
-            logger.exception("Search failed")
-            return
 
-        _render_results(summary=summary, backend=backend_info, results=results)
+                def on_progress(fraction: float, message: str, elapsed: float) -> None:
+                    safe_value = max(0.0, min(1.0, fraction))
+                    progress_bar.progress(
+                        safe_value, text=f"{message} ({elapsed:.2f}s)"
+                    )
+                    status_placeholder.caption(f"Elapsed: {elapsed:.2f}s")
+
+                try:
+                    with st.spinner("Loading vector index..."):
+                        timings = engine.prepare(
+                            method_filter=[method_id],
+                            progress_callback=on_progress,
+                        )
+                except Exception as exc:  # pragma: no cover - interactive feedback
+                    progress_placeholder.empty()
+                    status_placeholder.empty()
+                    st.error(f"Failed to load backend: {exc}")
+                    logger.exception("Backend initialisation failed")
+                    status = engine.status()
+                    method_error = status.get("method_errors", {}).get(method_id)
+                    method_ready = False
+                else:
+                    progress_placeholder.empty()
+                    status_placeholder.empty()
+                    status = engine.status()
+                    samples = status.get("sample_captions", [])
+                    st.session_state.setdefault("backend_timings", {})[
+                        method_id
+                    ] = timings
+                    st.session_state["active_backend"] = method_id
+                    method_ready = True
+                    method_error = None
+                    st.success(f"{label} loaded in {timings.get('total', 0.0):.2f}s")
+
+            timings_store = st.session_state.get("backend_timings", {}).get(method_id)
+            if timings_store:
+                st.caption("Most recent load timings (seconds)")
+                timing_rows = {
+                    key: f"{value:.2f}s" for key, value in timings_store.items()
+                }
+                st.write(timing_rows)
+
+            if not method_ready:
+                continue
+
+            current_samples = samples
+            query_inputs: dict[str, Any] = {}
+            with st.form(f"search_form_{method_id}", clear_on_submit=False):
+                st.subheader("Enter Query")
+                if query_mode == "text":
+                    query_inputs["query"] = st.text_area(
+                        "Please enter the text description to retrieve",
+                        placeholder="A golden retriever running on the grass",
+                        key=f"text_query_{method_id}",
+                    )
+                elif query_mode == "image":
+                    query_inputs["image_id"] = st.text_input(
+                        "Please enter an image ID",
+                        placeholder="Example: 1000092795",
+                        key=f"image_id_input_{method_id}",
+                    )
+                else:
+                    selected_id = ""
+                    if current_samples:
+                        labels = [
+                            _format_caption_option(item) for item in current_samples
+                        ]
+                        selected_label = st.selectbox(
+                            "Select sample caption",
+                            labels,
+                            key=f"caption_sample_{method_id}",
+                        )
+                        selected_index = labels.index(selected_label)
+                        selected_id = current_samples[selected_index]["id"]
+                        st.caption(
+                            "You can also enter a caption ID below to override."
+                        )
+                    manual_id = st.text_input(
+                        "Caption ID",
+                        value="",
+                        key=f"caption_id_input_{method_id}",
+                    )
+                    query_inputs["caption_id"] = manual_id.strip() or selected_id
+
+                submitted = st.form_submit_button(
+                    "Start Search",
+                    use_container_width=True,
+                )
+
+            if not submitted:
+                continue
+
+            st.session_state["active_backend"] = method_id
+            try:
+                with st.spinner("Searching..."):
+                    summary, backend_info, results = _execute_search(
+                        engine,
+                        backend_id=method_id,
+                        top_k=top_k,
+                        query_mode=query_mode,
+                        query_inputs=query_inputs,
+                    )
+            except KeyError as exc:
+                st.error(f"Could not find the specified ID: {exc}")
+                logger.exception("Missing identifier")
+                continue
+            except ValueError as exc:
+                st.warning(str(exc))
+                continue
+            except Exception as exc:  # pragma: no cover - interactive feedback
+                st.error(f"An error occurred during the search process: {exc}")
+                logger.exception("Search failed")
+                continue
+
+            _render_results(summary=summary, backend=backend_info, results=results)
 
 
 if __name__ == "__main__":
