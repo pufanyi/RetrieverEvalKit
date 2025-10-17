@@ -212,11 +212,11 @@ class Flickr30kSearchEngine:
         if method_filter is None:
             ordered_ids = [str(method["id"]) for method in _DEFAULT_METHODS]
         else:
-            ordered_ids = []
-            for method in _DEFAULT_METHODS:
-                identifier = str(method["id"])
-                if identifier in requested_ids:
-                    ordered_ids.append(identifier)
+            ordered_ids = [
+                str(method["id"])
+                for method in _DEFAULT_METHODS
+                if str(method["id"]) in requested_ids
+            ]
 
         with self._build_lock:
             pending_backends = [
