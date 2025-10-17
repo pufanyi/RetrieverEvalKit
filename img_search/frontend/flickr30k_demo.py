@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import os
+import queue
 import sys
 import textwrap
 import threading
 import time
-import queue
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,19 +22,19 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from img_search.data.embeddings import (
+from img_search.data.embeddings import (  # noqa: E402
     EmbeddingDatasetSpec,
     extract_embeddings,
     load_embedding_dataset,
 )
-from img_search.embedding.jina_v4 import JinaV4Encoder
-from img_search.search.faiss_search import FaissSearchIndex
-from img_search.search.hnswlib_search import (
+from img_search.embedding.jina_v4 import JinaV4Encoder  # noqa: E402
+from img_search.search.faiss_search import FaissSearchIndex  # noqa: E402
+from img_search.search.hnswlib_search import (  # noqa: E402
     HnswlibIndexConfig,
     HnswlibSearchIndex,
     hnswlib_available,
 )
-from img_search.search.scann_search import (
+from img_search.search.scann_search import (  # noqa: E402
     ScannIndexConfig,
     ScannSearchIndex,
     scann_available,
@@ -208,9 +208,7 @@ class Flickr30kSearchEngine:
             ]
             if unknown:
                 raise KeyError(
-                    "Unknown backend identifiers: {}".format(
-                        ", ".join(sorted(unknown))
-                    )
+                    "Unknown backend identifiers: {}".format(", ".join(sorted(unknown)))
                 )
 
         if method_filter is None:
@@ -325,9 +323,7 @@ class Flickr30kSearchEngine:
                     str(identifier): index
                     for index, identifier in enumerate(caption_ids)
                 }
-                timings["load_caption_embeddings"] = (
-                    time.perf_counter() - step_start
-                )
+                timings["load_caption_embeddings"] = time.perf_counter() - step_start
                 completed_steps += 1
                 notify(
                     completed_steps / total_steps,
@@ -379,9 +375,7 @@ class Flickr30kSearchEngine:
                     for cid in sample_ids
                     if cid in self._caption_metadata
                 ]
-                timings["prepare_caption_metadata"] = (
-                    time.perf_counter() - step_start
-                )
+                timings["prepare_caption_metadata"] = time.perf_counter() - step_start
                 completed_steps += 1
                 notify(
                     completed_steps / total_steps,
@@ -516,7 +510,8 @@ class Flickr30kSearchEngine:
         return np.asarray(self._image_vectors[index], dtype="float32")
 
     def caption_embedding(
-        self, caption_id: str
+        self,
+        caption_id: str,
     ) -> tuple[np.ndarray, CaptionRecord | None]:
         self._require_ready()
         index = self._caption_lookup.get(caption_id)
@@ -638,7 +633,9 @@ class Flickr30kSearchEngine:
                 "name": self.settings.image_dataset.dataset_name,
                 "config": self.settings.image_dataset.dataset_config,
                 "split": self.settings.image_dataset.split,
-            } if self.settings.image_dataset else None,
+            }
+            if self.settings.image_dataset
+            else None,
             "caption_dataset": (
                 {
                     "name": self.settings.caption_dataset.dataset_name,
@@ -829,6 +826,17 @@ def _render_results(
                         st.markdown(f"- {cap.get('caption') or '(No text)'}")
 
 
+def _create_progress_callback(
+    progress_bar, status_placeholder
+) -> Callable[[float, str, float], None]:
+    def on_progress(fraction: float, message: str, elapsed: float) -> None:
+        safe_value = max(0.0, min(1.0, fraction))
+        progress_bar.progress(safe_value, text=f"{message} ({elapsed:.2f}s)")
+        status_placeholder.caption(f"Elapsed: {elapsed:.2f}s")
+
+    return on_progress
+
+
 def main() -> None:
     st.set_page_config(
         page_title="Flickr30k Image Search Demo",
@@ -908,7 +916,8 @@ def main() -> None:
 
         if "exception" in exc_info:
             st.error(
-                f"💥 Failed to initialize the engine: {final_message or exc_info['exception']}"
+                "💥 Failed to initialize the engine: "
+                f"{final_message or exc_info['exception']}"
             )
             logger.exception(
                 "Engine initialisation failed", exc_info=exc_info["exception"]
@@ -935,10 +944,11 @@ def main() -> None:
     dataset_info = status.get("image_dataset") or {}
     caption_loaded = bool(status.get("caption_embeddings_loaded"))
     with overview_col1:
+        caption_status = "ready" if caption_loaded else "will load on demand"
         st.markdown(
             "## Quick Start\n"
             "- **Image embeddings**: cached and ready for index builds.\n"
-            f"- **Caption embeddings**: {'ready' if caption_loaded else 'will load on demand'}.\n"
+            f"- **Caption embeddings**: {caption_status}.\n"
             "- **Next step**: pick a retrieval backend tab below and click *Load*."
         )
     with overview_col2:
@@ -952,7 +962,8 @@ def main() -> None:
         )
     if not caption_loaded:
         st.info(
-            "Caption embeddings load the first time you search by caption, keeping startup lightweight."
+            "Caption embeddings load the first time you search by caption, "
+            "keeping startup lightweight."
         )
 
     top_k, query_mode = _render_sidebar(status)
@@ -998,12 +1009,9 @@ def main() -> None:
                     0.0, text="Preparing resources..."
                 )
 
-                def on_progress(fraction: float, message: str, elapsed: float) -> None:
-                    safe_value = max(0.0, min(1.0, fraction))
-                    progress_bar.progress(
-                        safe_value, text=f"{message} ({elapsed:.2f}s)"
-                    )
-                    status_placeholder.caption(f"Elapsed: {elapsed:.2f}s")
+                on_progress = _create_progress_callback(
+                    progress_bar, status_placeholder
+                )
 
                 try:
                     with st.spinner("Loading vector index..."):
