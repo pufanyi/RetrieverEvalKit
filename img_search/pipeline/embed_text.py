@@ -36,23 +36,23 @@ def safe_build_model(
         for attempt in range(max_retries):
             try:
                 logger.info(
-                    "Main process building model %s (attempt %d)",
+                    "Main process building model {} (attempt {})",
                     model.name,
                     attempt + 1,
                 )
                 model.build()
-                logger.info("Main process successfully built model %s", model.name)
+                logger.info("Main process successfully built model {}", model.name)
                 break
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
-                    "Main process failed to build model %s on attempt %d: %s",
+                    "Main process failed to build model {} on attempt {}: {}",
                     model.name,
                     attempt + 1,
                     exc,
                 )
                 if attempt == max_retries - 1:
                     logger.error(
-                        "Main process failed to build model %s after %d attempts",
+                        "Main process failed to build model {} after {} attempts",
                         model.name,
                         max_retries,
                     )
@@ -65,21 +65,21 @@ def safe_build_model(
         for attempt in range(max_retries):
             try:
                 logger.info(
-                    "Worker process %d building model %s (attempt %d)",
+                    "Worker process {} building model {} (attempt {})",
                     accelerator.process_index,
                     model.name,
                     attempt + 1,
                 )
                 model.build()
                 logger.info(
-                    "Worker process %d successfully built model %s",
+                    "Worker process {} successfully built model {}",
                     accelerator.process_index,
                     model.name,
                 )
                 break
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
-                    "Worker process %d failed to build model %s on attempt %d: %s",
+                    "Worker process {} failed to build model {} on attempt {}: {}",
                     accelerator.process_index,
                     model.name,
                     attempt + 1,
@@ -87,7 +87,7 @@ def safe_build_model(
                 )
                 if attempt == max_retries - 1:
                     logger.error(
-                        "Worker process %d failed to build model %s after %d attempts",
+                        "Worker process {} failed to build model {} after {} attempts",
                         accelerator.process_index,
                         model.name,
                         max_retries,
@@ -106,23 +106,23 @@ def safe_build_dataset(
         for attempt in range(max_retries):
             try:
                 logger.info(
-                    "Main process building dataset %s (attempt %d)",
+                    "Main process building dataset {} (attempt {})",
                     dataset.name,
                     attempt + 1,
                 )
                 dataset.build()
-                logger.info("Main process successfully built dataset %s", dataset.name)
+                logger.info("Main process successfully built dataset {}", dataset.name)
                 break
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
-                    "Main process failed to build dataset %s on attempt %d: %s",
+                    "Main process failed to build dataset {} on attempt {}: {}",
                     dataset.name,
                     attempt + 1,
                     exc,
                 )
                 if attempt == max_retries - 1:
                     logger.error(
-                        "Main process failed to build dataset %s after %d attempts",
+                        "Main process failed to build dataset {} after {} attempts",
                         dataset.name,
                         max_retries,
                     )
@@ -135,21 +135,21 @@ def safe_build_dataset(
         for attempt in range(max_retries):
             try:
                 logger.info(
-                    "Worker process %d building dataset %s (attempt %d)",
+                    "Worker process {} building dataset {} (attempt {})",
                     accelerator.process_index,
                     dataset.name,
                     attempt + 1,
                 )
                 dataset.build()
                 logger.info(
-                    "Worker process %d successfully built dataset %s",
+                    "Worker process {} successfully built dataset {}",
                     accelerator.process_index,
                     dataset.name,
                 )
                 break
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
-                    "Worker process %d failed to build dataset %s on attempt %d: %s",
+                    "Worker process {} failed to build dataset {} on attempt {}: {}",
                     accelerator.process_index,
                     dataset.name,
                     attempt + 1,
@@ -158,7 +158,7 @@ def safe_build_dataset(
                 if attempt == max_retries - 1:
                     logger.error(
                         (
-                            "Worker process %d failed to build dataset %s after %d "
+                            "Worker process {} failed to build dataset {} after {} "
                             "attempts"
                         ),
                         accelerator.process_index,

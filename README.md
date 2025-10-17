@@ -31,7 +31,7 @@ location (or filename pattern) with:
 ```sh
 export FLICKR30K_IMAGE_ROOT="/path/to/flickr30k/images"
 export FLICKR30K_IMAGE_PATTERN="{id}.jpg"  # customise if filenames differ
-export FLICKR30K_CAPTION_CONFIG="text"     # optional, defaults to "text"
+export FLICKR30K_CAPTION_CONFIG="texts"    # optional, defaults to "texts" (alias "text")
 ```
 
 The demo automatically downloads embeddings via the Hugging Face Hub during
