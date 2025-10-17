@@ -200,13 +200,13 @@ class Flickr30kSearchEngine:
         else:
             requested_ids = {str(identifier) for identifier in method_filter}
             unknown = [
-                identifier for identifier in requested_ids if identifier not in _DEFAULT_METHOD_MAP
+                identifier
+                for identifier in requested_ids
+                if identifier not in _DEFAULT_METHOD_MAP
             ]
             if unknown:
                 raise KeyError(
-                    "Unknown backend identifiers: {}".format(
-                        ", ".join(sorted(unknown))
-                    )
+                    "Unknown backend identifiers: {}".format(", ".join(sorted(unknown)))
                 )
 
         if method_filter is None:
@@ -220,7 +220,9 @@ class Flickr30kSearchEngine:
 
         with self._build_lock:
             pending_backends = [
-                identifier for identifier in ordered_ids if identifier not in self._backends
+                identifier
+                for identifier in ordered_ids
+                if identifier not in self._backends
             ]
             dataset_steps = 3 if not self._data_loaded else 0
             total_steps = dataset_steps + len(pending_backends)
@@ -264,7 +266,8 @@ class Flickr30kSearchEngine:
                 self._image_ids = [str(identifier) for identifier in image_ids]
                 self._image_vectors = np.asarray(image_vectors, dtype="float32")
                 self._image_lookup = {
-                    identifier: index for index, identifier in enumerate(self._image_ids)
+                    identifier: index
+                    for index, identifier in enumerate(self._image_ids)
                 }
                 timings["load_image_embeddings"] = time.perf_counter() - step_start
                 completed_steps += 1
@@ -275,7 +278,10 @@ class Flickr30kSearchEngine:
                     self._image_vectors.shape[1],
                 )
 
-                notify(completed_steps / total_steps, "Loading Flickr30k caption embeddings...")
+                notify(
+                    completed_steps / total_steps,
+                    "Loading Flickr30k caption embeddings...",
+                )
                 step_start = time.perf_counter()
                 logger.info(
                     "Loading Flickr30k caption embeddings: {}",
@@ -294,9 +300,7 @@ class Flickr30kSearchEngine:
                     str(identifier): index
                     for index, identifier in enumerate(caption_ids)
                 }
-                timings["load_caption_embeddings"] = (
-                    time.perf_counter() - step_start
-                )
+                timings["load_caption_embeddings"] = time.perf_counter() - step_start
                 completed_steps += 1
                 notify(
                     completed_steps / total_steps,
@@ -344,9 +348,7 @@ class Flickr30kSearchEngine:
                     for cid in sample_ids
                     if cid in self._caption_metadata
                 ]
-                timings["prepare_caption_metadata"] = (
-                    time.perf_counter() - step_start
-                )
+                timings["prepare_caption_metadata"] = time.perf_counter() - step_start
                 completed_steps += 1
                 notify(completed_steps / total_steps, "Caption metadata prepared")
                 self._data_loaded = True
@@ -783,7 +785,7 @@ def main() -> None:
 
     samples = status.get("sample_captions", [])
 
-    for spec, tab in zip(method_specs, tabs):
+    for spec, tab in zip(method_specs, tabs, strict=False):
         method_id = str(spec["id"])
         label = str(spec["label"])
         backend_name = str(spec.get("backend", "")).upper()
@@ -806,7 +808,7 @@ def main() -> None:
                 st.info("Vector index not loaded yet.")
 
             load_clicked = st.button(
-                "Load vector index",
+                f"Load {label} index",
                 key=f"load_backend_{method_id}",
                 use_container_width=True,
             )
@@ -844,9 +846,9 @@ def main() -> None:
                     status_placeholder.empty()
                     status = engine.status()
                     samples = status.get("sample_captions", [])
-                    st.session_state.setdefault("backend_timings", {})[
-                        method_id
-                    ] = timings
+                    st.session_state.setdefault("backend_timings", {})[method_id] = (
+                        timings
+                    )
                     st.session_state["active_backend"] = method_id
                     method_ready = True
                     method_error = None
@@ -892,9 +894,7 @@ def main() -> None:
                         )
                         selected_index = labels.index(selected_label)
                         selected_id = current_samples[selected_index]["id"]
-                        st.caption(
-                            "You can also enter a caption ID below to override."
-                        )
+                        st.caption("You can also enter a caption ID below to override.")
                     manual_id = st.text_input(
                         "Caption ID",
                         value="",
