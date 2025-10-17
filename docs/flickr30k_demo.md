@@ -13,7 +13,7 @@ the bundled FAISS, ScaNN, and HNSWlib backends and the Jina v4 encoder.
 - Ensure you can access the embedding datasets referenced in
   `img_search/frontend/flickr30k_demo.py`. By default the demo expects the public
   Hugging Face dataset `pufanyi/flickr30k-jina-embeddings-v4` and loads both the
-  `images` and `text` configs.
+  `images` and `texts` configs.
 - (Optional) Download the raw Flickr30k images locally so the interface can render
   thumbnails. The demo looks under `data/flickr30k/images/{id}.jpg` unless you point it
   elsewhere (see below).
@@ -45,7 +45,7 @@ You can adapt the demo without touching code via the following environment varia
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
-| `FLICKR30K_CAPTION_CONFIG` | Selects which split of the caption embedding dataset to load (`text`, `test`, etc.). | `text` |
+| `FLICKR30K_CAPTION_CONFIG` | Selects which split of the caption embedding dataset to load (`texts`, `text-tiny`, etc.). | `texts` (alias `text`) |
 | `FLICKR30K_IMAGE_ROOT` | Filesystem directory containing the original Flickr30k images. | `data/flickr30k/images` |
 | `FLICKR30K_IMAGE_PATTERN` | Filename template for images relative to the root. Use `{id}` as the placeholder. | `{id}.jpg` |
 

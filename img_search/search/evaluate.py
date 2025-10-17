@@ -166,7 +166,7 @@ def _filter_unavailable_backends(
             "hnswlib": "HNSWlib",
         }.get(backend, backend)
         logger.warning(
-            "Skipping %s %s configuration(s) because %s is not installed.",
+            "Skipping {} {} configuration(s) because {} is not installed.",
             count,
             backend,
             dependency,
@@ -277,7 +277,7 @@ def run_search_evaluation(config: SearchEvalConfig) -> list[dict[str, Any]]:
 
     top_k = _ensure_top_k(config.evaluation)
     logger.info(
-        "Prepared %s ANN method configuration(s) (top_k=%s, recall_at=%s)",
+        "Prepared {} ANN method configuration(s) (top_k={}, recall_at={})",
         len(method_configs),
         top_k,
         config.evaluation.recall_at,
@@ -336,7 +336,7 @@ def run_search_evaluation(config: SearchEvalConfig) -> list[dict[str, Any]]:
         recall_points=config.evaluation.recall_at,
     )
     if brute_rows:
-        logger.info("Appended %s brute-force baseline result(s)", len(brute_rows))
+        logger.info("Appended {} brute-force baseline result(s)", len(brute_rows))
     results.extend(brute_rows)
 
     for row in results:

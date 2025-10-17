@@ -59,15 +59,15 @@ def main() -> None:
     )
     args = get_args()
 
-    logging.info("Loading '%s' config from %s...", args.source_config, args.repo_id)
+    logging.info("Loading '{}' config from {}...", args.source_config, args.repo_id)
     full_ds = load_dataset(args.repo_id, name=args.source_config, token=args.token)[
         "train"
     ]
 
-    logging.info("Creating a tiny subset of %d samples...", args.num_samples)
+    logging.info("Creating a tiny subset of {} samples...", args.num_samples)
     tiny_ds = full_ds.shuffle(seed=args.seed).select(range(args.num_samples))
 
-    logging.info("Uploading '%s' config to %s...", args.target_config, args.repo_id)
+    logging.info("Uploading '{}' config to {}...", args.target_config, args.repo_id)
     tiny_ds.push_to_hub(
         repo_id=args.repo_id, token=args.token, config_name=args.target_config
     )

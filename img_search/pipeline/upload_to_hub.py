@@ -53,13 +53,13 @@ def main() -> None:
     args = get_args()
 
     if not args.image_parquet.exists():
-        logging.error("Image embeddings file not found: %s", args.image_parquet)
+        logging.error("Image embeddings file not found: {}", args.image_parquet)
         return
     if not args.text_parquet.exists():
-        logging.error("Text embeddings file not found: %s", args.text_parquet)
+        logging.error("Text embeddings file not found: {}", args.text_parquet)
         return
 
-    logging.info("Creating repository %s on Hugging Face Hub...", args.repo_id)
+    logging.info("Creating repository {} on Hugging Face Hub...", args.repo_id)
     api = HfApi(token=args.token)
     api.create_repo(
         repo_id=args.repo_id, repo_type="dataset", exist_ok=True, private=args.private
@@ -76,7 +76,7 @@ def main() -> None:
     image_ds.push_to_hub(repo_id=args.repo_id, token=args.token, config_name="images")
     text_ds.push_to_hub(repo_id=args.repo_id, token=args.token, config_name="texts")
 
-    logging.info("✅ Successfully uploaded datasets to %s.", args.repo_id)
+    logging.info("✅ Successfully uploaded datasets to {}.", args.repo_id)
 
 
 if __name__ == "__main__":

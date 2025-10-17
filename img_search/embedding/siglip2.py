@@ -78,8 +78,8 @@ class Siglip2Encoder(Encoder):
 
         if self._data_parallel and not use_data_parallel:
             logger.warning(
-                "Data parallel requested but only detected %d CUDA device(s); "
-                "falling back to %s.",
+                "Data parallel requested but only detected {} CUDA device(s); "
+                "falling back to {}.",
                 torch.cuda.device_count(),
                 self._device,
             )

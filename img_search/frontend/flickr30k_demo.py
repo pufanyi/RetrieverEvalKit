@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import sys
 import textwrap
 import threading
 from collections.abc import Mapping
@@ -13,6 +14,11 @@ import numpy as np
 import streamlit as st
 import torch
 from loguru import logger
+
+# Ensure local package imports work when launched via `streamlit run`.
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from img_search.data.embeddings import (
     EmbeddingDatasetSpec,
@@ -106,7 +112,9 @@ class DemoSettings:
                 embedding_column="embedding",
             )
         if self.caption_dataset is None:
-            caption_config = os.getenv("FLICKR30K_CAPTION_CONFIG", "text")
+            caption_config = os.getenv("FLICKR30K_CAPTION_CONFIG")
+            if not caption_config or caption_config == "text":
+                caption_config = "texts"
             self.caption_dataset = EmbeddingDatasetSpec(
                 dataset_name="pufanyi/flickr30k-jina-embeddings-v4",
                 dataset_config=caption_config,
@@ -180,7 +188,7 @@ class Flickr30kSearchEngine:
                 return
 
             logger.info(
-                "Loading Flickr30k image embeddings: %s",
+                "Loading Flickr30k image embeddings: {}",
                 self.settings.image_dataset,
             )
             image_dataset = load_embedding_dataset(self.settings.image_dataset)
@@ -197,13 +205,13 @@ class Flickr30kSearchEngine:
                 identifier: index for index, identifier in enumerate(self._image_ids)
             }
             logger.info(
-                "Loaded %s image embeddings (dim=%s)",
+                "Loaded {} image embeddings (dim={})",
                 len(self._image_ids),
                 self._image_vectors.shape[1],
             )
 
             logger.info(
-                "Loading Flickr30k caption embeddings: %s",
+                "Loading Flickr30k caption embeddings: {}",
                 self.settings.caption_dataset,
             )
             caption_dataset = load_embedding_dataset(self.settings.caption_dataset)
@@ -219,7 +227,7 @@ class Flickr30kSearchEngine:
                 str(identifier): index for index, identifier in enumerate(caption_ids)
             }
             logger.info(
-                "Loaded %s caption embeddings (dim=%s)",
+                "Loaded {} caption embeddings (dim={})",
                 len(self._caption_lookup),
                 self._caption_vectors.shape[1],
             )
@@ -269,7 +277,9 @@ class Flickr30kSearchEngine:
                 except Exception as exc:  # pragma: no cover - startup logging
                     identifier = str(method["id"])
                     logger.warning(
-                        "Skipping backend %s due to error: %s", identifier, exc
+                        "Skipping backend {} due to error: {}",
+                        identifier,
+                        exc,
                     )
                     self._backend_errors[identifier] = str(exc)
                     continue
@@ -287,7 +297,7 @@ class Flickr30kSearchEngine:
                     searcher=backend,
                     supports_similarity=supports_similarity,
                 )
-                logger.info("Built %s backend (%s)", identifier, label)
+                logger.info("Built {} backend ({})", identifier, label)
 
             if not self._backends:
                 raise RuntimeError(
