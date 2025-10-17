@@ -166,6 +166,7 @@ class Flickr30kSearchEngine:
         self._build_lock = threading.Lock()
         self._encoder_lock = threading.Lock()
         self._encoder: JinaV4Encoder | None = None
+        self._encoder_error: str | None = None
 
         self._image_ids: list[str] = []
         self._image_vectors: np.ndarray | None = None
@@ -536,6 +537,10 @@ class Flickr30kSearchEngine:
         self.prepare(method_filter=[], load_captions=False)
 
     def load_encoder(self) -> JinaV4Encoder:
+        if self._encoder_error is not None:
+            raise RuntimeError(
+                f"Text encoder initialisation failed earlier: {self._encoder_error}"
+            )
         encoder = self._encoder
         if encoder is not None:
             return encoder
@@ -544,7 +549,13 @@ class Flickr30kSearchEngine:
             if encoder is None:
                 logger.info("Initialising Jina V4 encoder for Streamlit demo")
                 encoder = JinaV4Encoder()
-                encoder.build()
+                try:
+                    encoder.build()
+                except Exception as exc:
+                    message = str(exc) or exc.__class__.__name__
+                    self._encoder_error = message
+                    logger.exception("Text encoder initialisation failed")
+                    raise
                 self._encoder = encoder
         assert self._encoder is not None
         return self._encoder
@@ -629,6 +640,8 @@ class Flickr30kSearchEngine:
             "caption_count": len(self._caption_lookup),
             "images_loaded": self._image_vectors is not None,
             "caption_embeddings_loaded": self._caption_vectors is not None,
+            "encoder_loaded": self._encoder is not None,
+            "encoder_error": self._encoder_error,
             "image_dataset": {
                 "name": self.settings.image_dataset.dataset_name,
                 "config": self.settings.image_dataset.dataset_config,
@@ -691,6 +704,7 @@ def _render_sidebar(
     status: Mapping[str, Any],
     *,
     caption_enabled: bool,
+    text_enabled: bool,
 ) -> tuple[int, str]:
     st.sidebar.header("Retrieval Settings")
     if not status.get("ready"):
@@ -711,7 +725,10 @@ def _render_sidebar(
         step=1,
     )
 
-    options: list[str] = ["text", "image"]
+    options: list[str] = []
+    if text_enabled:
+        options.append("text")
+    options.append("image")
     if caption_enabled:
         options.append("caption")
 
@@ -726,6 +743,10 @@ def _render_sidebar(
         horizontal=True,
     )
 
+    if not text_enabled:
+        st.sidebar.caption(
+            "Text search disabled because the encoder is unavailable."
+        )
     if not caption_enabled:
         st.sidebar.caption(
             "Caption search disabled to avoid loading large caption embeddings."
@@ -892,12 +913,18 @@ def main() -> None:
                     load_captions=False,
                     progress_callback=on_progress,
                 )
-                progress_queue.put(("encoder", None))
-                engine.load_encoder()
-                progress_queue.put(("done", None))
             except Exception as exc:
                 exc_info["exception"] = exc
                 progress_queue.put(("error", str(exc)))
+                return
+
+            try:
+                progress_queue.put(("encoder", None))
+                engine.load_encoder()
+            except Exception as exc:
+                progress_queue.put(("encoder_failed", str(exc)))
+            finally:
+                progress_queue.put(("done", None))
 
         thread = threading.Thread(target=prepare_engine_thread)
         thread.start()
@@ -906,6 +933,7 @@ def main() -> None:
         last_fraction = 0.0
         last_message = "Starting..."
         final_message = ""
+        encoder_failure: str | None = None
 
         while thread.is_alive():
             try:
@@ -915,6 +943,10 @@ def main() -> None:
                 elif item_type == "encoder":
                     last_message = "Loading text encoder model..."
                     last_fraction = 0.95  # Visually indicate we're near the end
+                elif item_type == "encoder_failed":
+                    encoder_failure = str(data)
+                    last_message = "Text encoder unavailable; continuing without text search"
+                    last_fraction = min(last_fraction, 0.95)
                 elif item_type == "done":
                     break
                 elif item_type == "error":
@@ -928,6 +960,9 @@ def main() -> None:
                 last_fraction, text=f"{last_message} ({elapsed:.2f}s)"
             )
             status_placeholder.caption(f"Elapsed: {elapsed:.2f}s")
+
+        if encoder_failure:
+            st.session_state["encoder_failure"] = encoder_failure
 
         thread.join()
 
@@ -986,8 +1021,16 @@ def main() -> None:
             "Caption search is disabled here to avoid loading the large caption embedding matrix."
         )
 
+    encoder_error = status.get("encoder_error")
+    if encoder_error:
+        failure_message = st.session_state.pop("encoder_failure", None)
+        st.warning(
+            failure_message
+            or f"Text search is unavailable: {encoder_error}"
+        )
+
     top_k, query_mode = _render_sidebar(
-        status, caption_enabled=caption_loaded
+        status, caption_enabled=caption_loaded, text_enabled=encoder_error is None
     )
 
     method_specs = list(_DEFAULT_METHODS)
@@ -1134,6 +1177,9 @@ def main() -> None:
                 logger.exception("Missing identifier")
                 continue
             except ValueError as exc:
+                st.warning(str(exc))
+                continue
+            except RuntimeError as exc:
                 st.warning(str(exc))
                 continue
             except Exception as exc:  # pragma: no cover - interactive feedback
