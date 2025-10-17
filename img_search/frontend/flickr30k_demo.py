@@ -848,7 +848,7 @@ def _render_results(
             st.markdown(f"### #{item['rank']} · Image {item['id']}")
             image_path = Path(item.get("image_path", ""))
             if image_path.exists():
-                st.image(str(image_path), use_container_width=True)
+                st.image(str(image_path), width="stretch")
             st.caption(
                 f"Similarity: {item['score']:.4f} · "
                 f"Distance: {item['distance']:.4f} ({item['metric']})"
@@ -1016,7 +1016,8 @@ def main() -> None:
         )
     if not caption_loaded:
         st.info(
-            "Caption search is disabled here to avoid loading the large caption embedding matrix."
+            "Caption search is disabled here to avoid loading the large caption "
+            "embedding matrix."
         )
 
     encoder_error = status.get("encoder_error")
@@ -1029,160 +1030,172 @@ def main() -> None:
     )
 
     method_specs = list(_DEFAULT_METHODS)
-    tab_labels = [str(spec["label"]) for spec in method_specs]
-    tabs = st.tabs(tab_labels)
-
     samples = status.get("sample_captions", [])
 
-    for spec, tab in zip(method_specs, tabs, strict=False):
-        method_id = str(spec["id"])
-        label = str(spec["label"])
-        backend_name = str(spec.get("backend", "")).upper()
-        metric = str(spec.get("config", {}).get("metric", "l2"))
+    active_backend_id = st.session_state.get("active_backend")
+    default_index = 0
+    if active_backend_id:
+        for idx, spec in enumerate(method_specs):
+            if str(spec["id"]) == active_backend_id:
+                default_index = idx
+                break
 
-        with tab:
-            st.markdown(f"### {label}")
-            st.caption(f"{backend_name} · Metric: {metric}")
+    st.markdown("## Search Setup")
+    selector_col, meta_col = st.columns([2, 1])
+    method_labels = [str(spec["label"]) for spec in method_specs]
+    with selector_col:
+        selected_label = st.selectbox(
+            "Retrieval Backend",
+            method_labels,
+            index=default_index,
+            key="backend_select",
+            help="Choose which vector index to query for this search.",
+        )
+    selected_spec = next(
+        spec for spec in method_specs if str(spec["label"]) == selected_label
+    )
+    method_id = str(selected_spec["id"])
+    backend_name = str(selected_spec.get("backend", "")).upper()
+    metric = str(selected_spec.get("config", {}).get("metric", "l2"))
 
-            method_ready = any(
-                info.get("id") == method_id for info in status.get("methods", [])
-            )
+    with meta_col:
+        st.markdown(f"**Backend:** {backend_name or '—'}")
+        st.markdown(f"**Metric:** {metric}")
+
+    method_ready = any(
+        info.get("id") == method_id for info in status.get("methods", [])
+    )
+    method_error = status.get("method_errors", {}).get(method_id)
+
+    if method_ready:
+        st.success("Vector index ready.")
+    elif method_error:
+        st.warning(f"Last load failed: {method_error}")
+    else:
+        st.info("Vector index not loaded yet.")
+
+    load_clicked = st.button(
+        "Load Selected Backend",
+        key=f"load_backend_{method_id}",
+        width="stretch",
+    )
+
+    if load_clicked:
+        progress_placeholder = st.empty()
+        status_placeholder = st.empty()
+        progress_bar = progress_placeholder.progress(0.0, text="Preparing resources...")
+        on_progress = _create_progress_callback(progress_bar, status_placeholder)
+
+        try:
+            with st.spinner("Loading vector index..."):
+                timings = engine.prepare(
+                    method_filter=[method_id],
+                    load_captions=False,
+                    progress_callback=on_progress,
+                )
+        except Exception as exc:  # pragma: no cover - interactive feedback
+            progress_placeholder.empty()
+            status_placeholder.empty()
+            st.error(f"Failed to load backend: {exc}")
+            logger.exception("Backend initialisation failed")
+            status = engine.status()
             method_error = status.get("method_errors", {}).get(method_id)
-
-            if method_ready:
-                st.success("Vector index ready.")
-            elif method_error:
-                st.warning(f"Last load failed: {method_error}")
-            else:
-                st.info("Vector index not loaded yet.")
-
-            load_clicked = st.button(
-                f"Load {label} index",
-                key=f"load_backend_{method_id}",
-                use_container_width=True,
-            )
-
-            if load_clicked:
-                progress_placeholder = st.empty()
-                status_placeholder = st.empty()
-                progress_bar = progress_placeholder.progress(
-                    0.0, text="Preparing resources..."
-                )
-
-                on_progress = _create_progress_callback(
-                    progress_bar, status_placeholder
-                )
-
-                try:
-                    with st.spinner("Loading vector index..."):
-                        timings = engine.prepare(
-                            method_filter=[method_id],
-                            load_captions=False,
-                            progress_callback=on_progress,
-                        )
-                except Exception as exc:  # pragma: no cover - interactive feedback
-                    progress_placeholder.empty()
-                    status_placeholder.empty()
-                    st.error(f"Failed to load backend: {exc}")
-                    logger.exception("Backend initialisation failed")
-                    status = engine.status()
-                    method_error = status.get("method_errors", {}).get(method_id)
-                    method_ready = False
-                else:
-                    progress_placeholder.empty()
-                    status_placeholder.empty()
-                    status = engine.status()
-                    samples = status.get("sample_captions", [])
-                    st.session_state.setdefault("backend_timings", {})[method_id] = (
-                        timings
-                    )
-                    st.session_state["active_backend"] = method_id
-                    method_ready = True
-                    method_error = None
-                    st.success(f"{label} loaded in {timings.get('total', 0.0):.2f}s")
-
-            timings_store = st.session_state.get("backend_timings", {}).get(method_id)
-            if timings_store:
-                st.caption("Most recent load timings (seconds)")
-                timing_rows = {
-                    key: f"{value:.2f}s" for key, value in timings_store.items()
-                }
-                st.write(timing_rows)
-
-            if not method_ready:
-                continue
-
-            current_samples = samples
-            query_inputs: dict[str, Any] = {}
-            with st.form(f"search_form_{method_id}", clear_on_submit=False):
-                st.subheader("Enter Query")
-                if query_mode == "text":
-                    query_inputs["query"] = st.text_area(
-                        "Please enter the text description to retrieve",
-                        placeholder="A golden retriever running on the grass",
-                        key=f"text_query_{method_id}",
-                    )
-                elif query_mode == "image":
-                    query_inputs["image_id"] = st.text_input(
-                        "Please enter an image ID",
-                        placeholder="Example: 1000092795",
-                        key=f"image_id_input_{method_id}",
-                    )
-                else:
-                    selected_id = ""
-                    if current_samples:
-                        labels = [
-                            _format_caption_option(item) for item in current_samples
-                        ]
-                        selected_label = st.selectbox(
-                            "Select sample caption",
-                            labels,
-                            key=f"caption_sample_{method_id}",
-                        )
-                        selected_index = labels.index(selected_label)
-                        selected_id = current_samples[selected_index]["id"]
-                        st.caption("You can also enter a caption ID below to override.")
-                    manual_id = st.text_input(
-                        "Caption ID",
-                        value="",
-                        key=f"caption_id_input_{method_id}",
-                    )
-                    query_inputs["caption_id"] = manual_id.strip() or selected_id
-
-                submitted = st.form_submit_button(
-                    "Start Search",
-                    use_container_width=True,
-                )
-
-            if not submitted:
-                continue
-
+            method_ready = False
+        else:
+            progress_placeholder.empty()
+            status_placeholder.empty()
+            status = engine.status()
+            samples = status.get("sample_captions", [])
+            st.session_state.setdefault("backend_timings", {})[method_id] = timings
             st.session_state["active_backend"] = method_id
-            try:
-                with st.spinner("Searching..."):
-                    summary, backend_info, results = _execute_search(
-                        engine,
-                        backend_id=method_id,
-                        top_k=top_k,
-                        query_mode=query_mode,
-                        query_inputs=query_inputs,
-                    )
-            except KeyError as exc:
-                st.error(f"Could not find the specified ID: {exc}")
-                logger.exception("Missing identifier")
-                continue
-            except ValueError as exc:
-                st.warning(str(exc))
-                continue
-            except RuntimeError as exc:
-                st.warning(str(exc))
-                continue
-            except Exception as exc:  # pragma: no cover - interactive feedback
-                st.error(f"An error occurred during the search process: {exc}")
-                logger.exception("Search failed")
-                continue
+            method_ready = True
+            st.success(f"{selected_label} loaded in {timings.get('total', 0.0):.2f}s")
 
-            _render_results(summary=summary, backend=backend_info, results=results)
+        method_ready = any(
+            info.get("id") == method_id for info in status.get("methods", [])
+        )
+        method_error = status.get("method_errors", {}).get(method_id)
+
+    timings_store = st.session_state.get("backend_timings", {}).get(method_id)
+    if timings_store:
+        st.caption("Most recent load timings (seconds)")
+        timing_rows = {key: f"{value:.2f}s" for key, value in timings_store.items()}
+        st.write(timing_rows)
+
+    if not method_ready:
+        st.info("Load the selected backend to start searching.")
+        return
+
+    current_samples = samples
+    query_inputs: dict[str, Any] = {}
+    st.divider()
+    st.subheader("Enter Query")
+    with st.form("search_form", clear_on_submit=False):
+        if query_mode == "text":
+            query_inputs["query"] = st.text_area(
+                "Please enter the text description to retrieve",
+                placeholder="A golden retriever running on the grass",
+                key="text_query",
+            )
+        elif query_mode == "image":
+            query_inputs["image_id"] = st.text_input(
+                "Please enter an image ID",
+                placeholder="Example: 1000092795",
+                key="image_id_input",
+            )
+        else:
+            selected_id = ""
+            if current_samples:
+                labels = [_format_caption_option(item) for item in current_samples]
+                selected_sample = st.selectbox(
+                    "Select sample caption",
+                    labels,
+                    key="caption_sample",
+                )
+                selected_index = labels.index(selected_sample)
+                selected_id = current_samples[selected_index]["id"]
+                st.caption("You can also enter a caption ID below to override.")
+            manual_id = st.text_input(
+                "Caption ID",
+                value="",
+                key="caption_id_input",
+            )
+            query_inputs["caption_id"] = manual_id.strip() or selected_id
+
+        submitted = st.form_submit_button(
+            "Start Search",
+            width="stretch",
+        )
+
+    if not submitted:
+        return
+
+    st.session_state["active_backend"] = method_id
+    try:
+        with st.spinner("Searching..."):
+            summary, backend_info, results = _execute_search(
+                engine,
+                backend_id=method_id,
+                top_k=top_k,
+                query_mode=query_mode,
+                query_inputs=query_inputs,
+            )
+    except KeyError as exc:
+        st.error(f"Could not find the specified ID: {exc}")
+        logger.exception("Missing identifier")
+        return
+    except ValueError as exc:
+        st.warning(str(exc))
+        return
+    except RuntimeError as exc:
+        st.warning(str(exc))
+        return
+    except Exception as exc:  # pragma: no cover - interactive feedback
+        st.error(f"An error occurred during the search process: {exc}")
+        logger.exception("Search failed")
+        return
+
+    _render_results(summary=summary, backend=backend_info, results=results)
 
 
 if __name__ == "__main__":
