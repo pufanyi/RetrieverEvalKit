@@ -21,6 +21,7 @@ dependencies = [
     "sentence-transformers>=3.0.0",
     "scann>=1.2.10",
     "vllm>=0.10.2",
+    "streamlit>=1.42.0",
 ]
 
 [dependency-groups]

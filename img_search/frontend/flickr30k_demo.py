@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import textwrap
 import threading
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -9,12 +10,9 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import streamlit as st
 import torch
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 from loguru import logger
-from pydantic import BaseModel, Field
 
 from img_search.data.embeddings import (
     EmbeddingDatasetSpec,
@@ -481,177 +479,225 @@ class Flickr30kSearchEngine:
             "default_top_k": self.settings.default_top_k,
             "max_top_k": self.settings.max_top_k,
         }
-class CaptionPreview(BaseModel):
-    id: str
-    caption: str | None = None
 
 
-class ImageHit(BaseModel):
-    rank: int
-    id: str
-    score: float
-    distance: float
-    metric: str
-    caption: str | None = None
-    captions: list[CaptionPreview] = Field(default_factory=list)
-    image_url: str | None = None
-    image_path: str | None = None
+@st.cache_resource(show_spinner="正在加载向量索引…")
+def load_engine(settings: DemoSettings | None = None) -> Flickr30kSearchEngine:
+    engine = Flickr30kSearchEngine(settings or DemoSettings())
+    engine.prepare()
+    return engine
 
 
-class SearchRequest(BaseModel):
-    backend: str = Field(default="faiss_flat")
-    top_k: int = Field(default=9, ge=1, le=200)
-    query_mode: str = Field(default="text")
-    query: str | None = None
-    caption_id: str | None = None
-    image_id: str | None = None
-
-    model_config = {"extra": "forbid"}
+def _format_caption_option(record: Mapping[str, Any]) -> str:
+    caption = record.get("caption") or "(无文本)"
+    preview = textwrap.shorten(caption, width=36, placeholder="…")
+    image_id = record.get("image_id") or "?"
+    return f"{record['id']} · 图像 {image_id} · {preview}"
 
 
-class SearchResponse(BaseModel):
-    backend: str
-    backend_label: str
-    metric: str
-    top_k: int
-    query: dict[str, Any]
-    backend_config: dict[str, Any]
-    results: list[ImageHit]
-
-
-class StatusResponse(BaseModel):
-    ready: bool
-    image_count: int
-    caption_count: int
-    image_root: str | None
-    image_pattern: str
-    methods: list[dict[str, Any]]
-    method_errors: dict[str, str]
-    sample_captions: list[dict[str, Any]]
-    images_served: bool
-    default_top_k: int
-    max_top_k: int
-
-
-class CaptionDetail(BaseModel):
-    id: str
-    image_id: str | None
-    caption: str | None
-
-
-def create_app(settings: DemoSettings | None = None) -> FastAPI:
-    settings = settings or DemoSettings()
-    engine = Flickr30kSearchEngine(settings)
-    app = FastAPI(title="Flickr30k Search Demo", version="0.1.0")
-
-    static_dir = Path(__file__).parent / "static"
-    templates_dir = Path(__file__).parent / "templates"
-
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
-
-    if settings.image_root.exists():
-        app.mount("/images", StaticFiles(directory=settings.image_root), name="images")
-        engine.serve_images = True
-    else:
-        engine.serve_images = False
-        logger.warning(
-            "Image directory %s does not exist; image URLs will be disabled",
-            settings.image_root,
-        )
-
-    @app.on_event("startup")
-    async def _startup() -> None:
-        await engine.ensure_ready()
-
-    @app.get("/", response_class=FileResponse)
-    async def index() -> str:
-        return FileResponse(templates_dir / "index.html")
-
-    @app.get("/api/status", response_model=StatusResponse)
-    async def api_status() -> StatusResponse:
-        await engine.ensure_ready()
-        return StatusResponse(**engine.status())
-
-    @app.get("/api/captions/{caption_id}", response_model=CaptionDetail)
-    async def api_caption(caption_id: str) -> CaptionDetail:
-        await engine.ensure_ready()
-        record = engine.caption_detail(caption_id)
-        if record is None:
-            raise HTTPException(status_code=404, detail="Caption not found")
-        return CaptionDetail(
-            id=record.id,
-            image_id=record.image_id,
-            caption=record.caption,
-        )
-
-    @app.get(
-        "/api/images/{image_id}/captions", response_model=list[CaptionPreview]
+def _render_sidebar(status: Mapping[str, Any]) -> tuple[str, int, str]:
+    st.sidebar.header("检索设置")
+    backend_labels = {
+        method["id"]: method["label"] for method in status.get("methods", [])
+    }
+    backend_id = st.sidebar.selectbox(
+        "向量检索算法",
+        options=list(backend_labels.keys()) or ["faiss_flat"],
+        format_func=lambda value: backend_labels.get(value, value),
     )
-    async def api_image_captions(image_id: str) -> list[CaptionPreview]:
-        await engine.ensure_ready()
-        records = engine.image_captions(image_id)
-        return [CaptionPreview(id=item.id, caption=item.caption) for item in records]
 
-    @app.post("/api/search", response_model=SearchResponse)
-    async def api_search(request: SearchRequest) -> SearchResponse:
-        await engine.ensure_ready()
-        top_k = min(request.top_k, engine.settings.max_top_k)
-        query_summary: dict[str, Any]
-        if request.query_mode == "text":
-            if not request.query or not request.query.strip():
-                raise HTTPException(status_code=400, detail="Text query required")
-            vector = await asyncio.to_thread(engine.encode_text, request.query)
-            query_summary = {"mode": "text", "text": request.query}
-        elif request.query_mode == "caption":
-            if not request.caption_id:
-                raise HTTPException(status_code=400, detail="caption_id is required")
-            try:
-                vector, record = engine.caption_embedding(request.caption_id)
-            except KeyError as exc:  # pragma: no cover - runtime validation
-                raise HTTPException(
-                    status_code=404, detail="Caption not found"
-                ) from exc
-            query_summary = {
-                "mode": "caption",
-                "id": request.caption_id,
-                "image_id": record.image_id if record else None,
-                "caption": record.caption if record else None,
-            }
-        elif request.query_mode == "image":
-            if not request.image_id:
-                raise HTTPException(status_code=400, detail="image_id is required")
-            try:
-                vector = engine.image_embedding(request.image_id)
-            except KeyError as exc:  # pragma: no cover - runtime validation
-                raise HTTPException(
-                    status_code=404, detail="Image not found"
-                ) from exc
-            query_summary = {
-                "mode": "image",
-                "id": request.image_id,
-                "captions": [
-                    {"id": item.id, "caption": item.caption}
-                    for item in engine.image_captions(request.image_id)
+    top_k = st.sidebar.slider(
+        "返回结果数量",
+        min_value=3,
+        max_value=int(status.get("max_top_k", 50)),
+        value=int(status.get("default_top_k", 9)),
+        step=1,
+    )
+
+    query_mode = st.sidebar.radio(
+        "查询模式",
+        options=("text", "image", "caption"),
+        format_func=lambda mode: {"text": "文本", "image": "图像", "caption": "标注"}[mode],
+        horizontal=True,
+    )
+
+    st.sidebar.markdown("---")
+    st.sidebar.caption(
+        f"📦 共 {status.get('image_count', 0):,} 张图像 · {status.get('caption_count', 0):,} 条标注"
+    )
+    if status.get("method_errors"):
+        with st.sidebar.expander("未启用的检索后端"):
+            for key, message in status["method_errors"].items():
+                st.warning(f"{key}: {message}")
+
+    return backend_id, top_k, query_mode
+
+
+def _execute_search(
+    engine: Flickr30kSearchEngine,
+    *,
+    backend_id: str,
+    top_k: int,
+    query_mode: str,
+    query_inputs: Mapping[str, Any],
+) -> tuple[dict[str, Any], BackendInfo, list[dict[str, Any]]]:
+    if query_mode == "text":
+        query = (query_inputs.get("query") or "").strip()
+        if not query:
+            raise ValueError("请输入文本描述")
+        vector = engine.encode_text(query)
+        summary = {"mode": "text", "text": query}
+    elif query_mode == "image":
+        image_id = (query_inputs.get("image_id") or "").strip()
+        if not image_id:
+            raise ValueError("请输入图像 ID")
+        vector = engine.image_embedding(image_id)
+        summary = {
+            "mode": "image",
+            "id": image_id,
+            "captions": [
+                {"id": item.id, "caption": item.caption}
+                for item in engine.image_captions(image_id)
+            ],
+        }
+    else:
+        caption_id = (query_inputs.get("caption_id") or "").strip()
+        if not caption_id:
+            raise ValueError("请选择或输入标注 ID")
+        vector, record = engine.caption_embedding(caption_id)
+        summary = {
+            "mode": "caption",
+            "id": caption_id,
+            "image_id": record.image_id if record else None,
+            "caption": record.caption if record else None,
+        }
+
+    backend_info, results = engine.run_search(
+        backend_id=backend_id, query_vector=vector, top_k=top_k
+    )
+    return summary, backend_info, results
+
+
+def _render_results(
+    *,
+    summary: Mapping[str, Any],
+    backend: BackendInfo,
+    results: list[dict[str, Any]],
+) -> None:
+    st.subheader("检索结果")
+    with st.expander("查询信息", expanded=True):
+        st.write(
+            {
+                "模式": {"text": "文本", "image": "图像", "caption": "标注"}[
+                    summary.get("mode", "text")
                 ],
+                "后端": backend.label,
+                "相似度指标": backend.metric,
             }
+        )
+        if summary.get("mode") == "text":
+            st.markdown(f"**查询文本：** {summary.get('text', '')}")
+        elif summary.get("mode") == "image":
+            st.markdown(f"**图像 ID：** {summary.get('id', '')}")
         else:
-            raise HTTPException(status_code=400, detail="Unsupported query_mode")
+            caption_text = summary.get("caption") or "(无文本)"
+            st.markdown(f"**标注：** {caption_text}")
 
-        backend_info, results = engine.run_search(
-            backend_id=request.backend, query_vector=vector, top_k=top_k
-        )
-        hits = [ImageHit(**item) for item in results]
-        return SearchResponse(
-            backend=backend_info.identifier,
-            backend_label=backend_info.label,
-            metric=backend_info.metric,
-            top_k=top_k,
-            query=query_summary,
-            backend_config=dict(backend_info.config),
-            results=hits,
-        )
+    if not results:
+        st.info("未找到匹配结果。")
+        return
 
-    return app
+    columns = st.columns(3)
+    for index, item in enumerate(results):
+        column = columns[index % 3]
+        with column:
+            st.markdown(f"### #{item['rank']} · 图像 {item['id']}")
+            image_path = Path(item.get("image_path", ""))
+            if image_path.exists():
+                st.image(str(image_path), use_container_width=True)
+            st.caption(
+                f"相似度：{item['score']:.4f} · 距离：{item['distance']:.4f} ({item['metric']})"
+            )
+            caption = item.get("caption") or "暂无描述"
+            st.write(caption)
+            extra = item.get("captions", [])[1:]
+            if extra:
+                with st.expander("更多标注"):
+                    for cap in extra:
+                        st.markdown(f"- {cap.get('caption') or '(无文本)'}")
 
 
-app = create_app()
+def main() -> None:
+    st.set_page_config(
+        page_title="Flickr30k 图像检索演示",
+        page_icon="🔍",
+        layout="wide",
+    )
+    st.title("🔍 Flickr30k 图像检索")
+    st.caption("使用 Jina v4 编码器的快速向量检索体验")
+
+    engine = load_engine()
+    status = engine.status()
+
+    stats_col1, stats_col2, stats_col3 = st.columns(3)
+    stats_col1.metric("图像数量", f"{status.get('image_count', 0):,}")
+    stats_col2.metric("标注数量", f"{status.get('caption_count', 0):,}")
+    stats_col3.metric("可选后端", f"{len(status.get('methods', []))}")
+
+    backend_id, top_k, query_mode = _render_sidebar(status)
+
+    samples = status.get("sample_captions", [])
+    query_inputs: dict[str, Any] = {}
+
+    with st.form("search_form", clear_on_submit=False):
+        st.subheader("输入查询")
+        if query_mode == "text":
+            query_inputs["query"] = st.text_area(
+                "请输入要检索的文本描述",
+                placeholder="一只正在草地上奔跑的金毛犬",
+            )
+        elif query_mode == "image":
+            query_inputs["image_id"] = st.text_input(
+                "请输入图像 ID",
+                placeholder="例如：1000092795",
+            )
+        else:
+            selected_id = ""
+            if samples:
+                labels = [_format_caption_option(item) for item in samples]
+                selected_label = st.selectbox("选择示例标注", labels)
+                selected_index = labels.index(selected_label)
+                selected_id = samples[selected_index]["id"]
+                st.caption("也可以在下方输入任意标注 ID 覆盖选择")
+            manual_id = st.text_input("标注 ID", value="")
+            query_inputs["caption_id"] = manual_id.strip() or selected_id
+
+        submitted = st.form_submit_button("开始检索", use_container_width=True)
+
+    if submitted:
+        try:
+            with st.spinner("正在检索…"):
+                summary, backend_info, results = _execute_search(
+                    engine,
+                    backend_id=backend_id,
+                    top_k=top_k,
+                    query_mode=query_mode,
+                    query_inputs=query_inputs,
+                )
+        except KeyError as exc:
+            st.error(f"无法找到指定的 ID：{exc}")
+            logger.exception("Missing identifier")
+            return
+        except ValueError as exc:
+            st.warning(str(exc))
+            return
+        except Exception as exc:  # pragma: no cover - interactive feedback
+            st.error(f"检索过程中出现错误：{exc}")
+            logger.exception("Search failed")
+            return
+
+        _render_results(summary=summary, backend=backend_info, results=results)
+
+
+if __name__ == "__main__":
+    main()
