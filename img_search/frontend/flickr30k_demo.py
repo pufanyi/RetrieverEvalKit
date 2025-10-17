@@ -494,18 +494,25 @@ class Flickr30kSearchEngine:
         self._require_ready()
         return self._caption_metadata.get(caption_id)
 
+    def load_encoder(self) -> JinaV4Encoder:
+        encoder = self._encoder
+        if encoder is not None:
+            return encoder
+        with self._encoder_lock:
+            encoder = self._encoder
+            if encoder is None:
+                logger.info("Initialising Jina V4 encoder for Streamlit demo")
+                encoder = JinaV4Encoder()
+                encoder.build()
+                self._encoder = encoder
+        assert self._encoder is not None
+        return self._encoder
+
     def encode_text(self, text: str) -> np.ndarray:
         text = text.strip()
         if not text:
             raise ValueError("Text query must not be empty")
-        encoder = self._encoder
-        if encoder is None:
-            with self._encoder_lock:
-                encoder = self._encoder
-                if encoder is None:
-                    encoder = JinaV4Encoder()
-                    self._encoder = encoder
-        assert encoder is not None
+        encoder = self.load_encoder()
         with torch.inference_mode():
             encoded = encoder.batch_encode(texts=[text])
         if isinstance(encoded, list):
@@ -609,7 +616,9 @@ class Flickr30kSearchEngine:
 
 @st.cache_resource()
 def load_engine(settings: DemoSettings | None = None) -> Flickr30kSearchEngine:
-    return Flickr30kSearchEngine(settings or DemoSettings())
+    engine = Flickr30kSearchEngine(settings or DemoSettings())
+    engine.load_encoder()
+    return engine
 
 
 def _format_caption_option(record: Mapping[str, Any]) -> str:
