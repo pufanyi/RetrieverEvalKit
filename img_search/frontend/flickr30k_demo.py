@@ -6,6 +6,7 @@ import sys
 import textwrap
 import threading
 import time
+import queue
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -675,12 +676,11 @@ class Flickr30kSearchEngine:
         }
 
 
-@st.cache_resource()
-def load_engine(settings: DemoSettings | None = None) -> Flickr30kSearchEngine:
-    engine = Flickr30kSearchEngine(settings or DemoSettings())
-    engine.ensure_data_loaded()
-    engine.load_encoder()
-    return engine
+def get_engine(settings: DemoSettings | None = None) -> Flickr30kSearchEngine:
+    """Gets the search engine instance from the session state, creating it if needed."""
+    if "engine" not in st.session_state:
+        st.session_state.engine = Flickr30kSearchEngine(settings or DemoSettings())
+    return st.session_state.engine
 
 
 def _format_caption_option(record: Mapping[str, Any]) -> str:
@@ -840,7 +840,90 @@ def main() -> None:
 
     st.session_state.setdefault("backend_timings", {})
 
-    engine = load_engine()
+    engine = get_engine()
+
+    if not engine.is_ready:
+        st.header("🚀 Initializing Demo")
+        st.markdown(
+            "Preparing image and caption embeddings for the first time. "
+            "This might take a moment, but it's a one-off process."
+        )
+
+        progress_placeholder = st.empty()
+        status_placeholder = st.empty()
+        progress_bar = progress_placeholder.progress(0.0, text="Starting...")
+
+        # Use a queue to communicate between the prepare thread and the main thread
+        progress_queue = queue.Queue()
+        exc_info = {}
+
+        def on_progress(fraction: float, message: str, elapsed: float) -> None:
+            progress_queue.put(("progress", (fraction, message)))
+
+        def prepare_engine_thread() -> None:
+            try:
+                engine.prepare(
+                    method_filter=[],
+                    load_captions=True,
+                    progress_callback=on_progress,
+                )
+                progress_queue.put(("encoder", None))
+                engine.load_encoder()
+                progress_queue.put(("done", None))
+            except Exception as exc:
+                exc_info["exception"] = exc
+                progress_queue.put(("error", str(exc)))
+
+        thread = threading.Thread(target=prepare_engine_thread)
+        thread.start()
+
+        start_time = time.perf_counter()
+        last_fraction = 0.0
+        last_message = "Starting..."
+        final_message = ""
+
+        while thread.is_alive():
+            try:
+                item_type, data = progress_queue.get(timeout=0.1)
+                if item_type == "progress":
+                    last_fraction, last_message = data
+                elif item_type == "encoder":
+                    last_message = "Loading text encoder model..."
+                    last_fraction = 0.95  # Visually indicate we're near the end
+                elif item_type == "done":
+                    break
+                elif item_type == "error":
+                    final_message = str(data)
+                    break
+            except queue.Empty:
+                pass  # No new message, just update the timer
+
+            elapsed = time.perf_counter() - start_time
+            progress_bar.progress(
+                last_fraction, text=f"{last_message} ({elapsed:.2f}s)"
+            )
+            status_placeholder.caption(f"Elapsed: {elapsed:.2f}s")
+
+        thread.join()
+
+        if "exception" in exc_info:
+            st.error(
+                f"💥 Failed to initialize the engine: {final_message or exc_info['exception']}"
+            )
+            logger.exception(
+                "Engine initialisation failed", exc_info=exc_info["exception"]
+            )
+            st.stop()
+
+        progress_placeholder.empty()
+        status_placeholder.empty()
+        st.success("✅ Demo ready! Loading the main interface...")
+        time.sleep(1.5)
+        try:
+            st.rerun()
+        except AttributeError:  # pragma: no cover - Streamlit version check
+            st.experimental_rerun()
+
     status = engine.status()
 
     stats_col1, stats_col2, stats_col3 = st.columns(3)
