@@ -80,4 +80,3 @@ captions to make it easier to try the caption-based workflow.
   with FAISS and lists the unavailable backends in the sidebar.
 - When caption/image IDs come from the public dataset they remain strings (as stored in
   Hugging Face). Double-check the ID formatting if lookups fail.
-

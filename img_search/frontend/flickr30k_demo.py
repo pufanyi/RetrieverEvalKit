@@ -235,9 +235,7 @@ class Flickr30kSearchEngine:
                 image_id = str(image_id_value) if image_id_value is not None else None
                 caption_text_value = row.get("caption")
                 caption_text = (
-                    None
-                    if caption_text_value is None
-                    else str(caption_text_value)
+                    None if caption_text_value is None else str(caption_text_value)
                 )
                 record = CaptionRecord(
                     id=caption_id,
@@ -452,9 +450,7 @@ class Flickr30kSearchEngine:
             "image_count": len(self._image_ids),
             "caption_count": len(self._caption_lookup),
             "image_root": (
-                str(self.settings.image_root)
-                if self.settings.image_root
-                else None
+                str(self.settings.image_root) if self.settings.image_root else None
             ),
             "image_pattern": self.settings.image_pattern,
             "methods": [
@@ -517,7 +513,9 @@ def _render_sidebar(status: Mapping[str, Any]) -> tuple[str, int, str]:
     query_mode = st.sidebar.radio(
         "查询模式",
         options=("text", "image", "caption"),
-        format_func=lambda mode: {"text": "文本", "image": "图像", "caption": "标注"}[mode],
+        format_func=lambda mode: {"text": "文本", "image": "图像", "caption": "标注"}[
+            mode
+        ],
         horizontal=True,
     )
 
