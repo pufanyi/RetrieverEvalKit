@@ -744,9 +744,7 @@ def _render_sidebar(
     )
 
     if not text_enabled:
-        st.sidebar.caption(
-            "Text search disabled because the encoder is unavailable."
-        )
+        st.sidebar.caption("Text search disabled because the encoder is unavailable.")
     if not caption_enabled:
         st.sidebar.caption(
             "Caption search disabled to avoid loading large caption embeddings."
@@ -945,7 +943,9 @@ def main() -> None:
                     last_fraction = 0.95  # Visually indicate we're near the end
                 elif item_type == "encoder_failed":
                     encoder_failure = str(data)
-                    last_message = "Text encoder unavailable; continuing without text search"
+                    last_message = (
+                        "Text encoder unavailable; continuing without text search"
+                    )
                     last_fraction = min(last_fraction, 0.95)
                 elif item_type == "done":
                     break
@@ -997,9 +997,7 @@ def main() -> None:
     caption_loaded = bool(status.get("caption_embeddings_loaded"))
     with overview_col1:
         caption_status = (
-            "ready"
-            if caption_loaded
-            else "disabled · caption embeddings stay unloaded"
+            "ready" if caption_loaded else "disabled · caption embeddings stay unloaded"
         )
         st.markdown(
             "## Quick Start\n"
@@ -1024,10 +1022,7 @@ def main() -> None:
     encoder_error = status.get("encoder_error")
     if encoder_error:
         failure_message = st.session_state.pop("encoder_failure", None)
-        st.warning(
-            failure_message
-            or f"Text search is unavailable: {encoder_error}"
-        )
+        st.warning(failure_message or f"Text search is unavailable: {encoder_error}")
 
     top_k, query_mode = _render_sidebar(
         status, caption_enabled=caption_loaded, text_enabled=encoder_error is None
