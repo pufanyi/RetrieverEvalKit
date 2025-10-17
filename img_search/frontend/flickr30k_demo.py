@@ -477,7 +477,7 @@ class Flickr30kSearchEngine:
         }
 
 
-@st.cache_resource(show_spinner="正在加载向量索引…")
+@st.cache_resource(show_spinner="Loading vector index...")
 def load_engine(settings: DemoSettings | None = None) -> Flickr30kSearchEngine:
     engine = Flickr30kSearchEngine(settings or DemoSettings())
     engine.prepare()
@@ -485,25 +485,25 @@ def load_engine(settings: DemoSettings | None = None) -> Flickr30kSearchEngine:
 
 
 def _format_caption_option(record: Mapping[str, Any]) -> str:
-    caption = record.get("caption") or "(无文本)"
+    caption = record.get("caption") or "(No text)"
     preview = textwrap.shorten(caption, width=36, placeholder="…")
     image_id = record.get("image_id") or "?"
-    return f"{record['id']} · 图像 {image_id} · {preview}"
+    return f"{record['id']} · Image {image_id} · {preview}"
 
 
 def _render_sidebar(status: Mapping[str, Any]) -> tuple[str, int, str]:
-    st.sidebar.header("检索设置")
+    st.sidebar.header("Retrieval Settings")
     backend_labels = {
         method["id"]: method["label"] for method in status.get("methods", [])
     }
     backend_id = st.sidebar.selectbox(
-        "向量检索算法",
+        "Vector Retrieval Algorithm",
         options=list(backend_labels.keys()) or ["faiss_flat"],
         format_func=lambda value: backend_labels.get(value, value),
     )
 
     top_k = st.sidebar.slider(
-        "返回结果数量",
+        "Number of results",
         min_value=3,
         max_value=int(status.get("max_top_k", 50)),
         value=int(status.get("default_top_k", 9)),
@@ -511,20 +511,23 @@ def _render_sidebar(status: Mapping[str, Any]) -> tuple[str, int, str]:
     )
 
     query_mode = st.sidebar.radio(
-        "查询模式",
+        "Query Mode",
         options=("text", "image", "caption"),
-        format_func=lambda mode: {"text": "文本", "image": "图像", "caption": "标注"}[
-            mode
-        ],
+        format_func=lambda mode: {
+            "text": "Text",
+            "image": "Image",
+            "caption": "Caption",
+        }[mode],
         horizontal=True,
     )
 
     st.sidebar.markdown("---")
     st.sidebar.caption(
-        f"📦 共 {status.get('image_count', 0):,} 张图像 · {status.get('caption_count', 0):,} 条标注"
+        f"📦 {status.get('image_count', 0):,} images · "
+        f"{status.get('caption_count', 0):,} captions"
     )
     if status.get("method_errors"):
-        with st.sidebar.expander("未启用的检索后端"):
+        with st.sidebar.expander("Disabled Retrieval Backends"):
             for key, message in status["method_errors"].items():
                 st.warning(f"{key}: {message}")
 
@@ -542,13 +545,13 @@ def _execute_search(
     if query_mode == "text":
         query = (query_inputs.get("query") or "").strip()
         if not query:
-            raise ValueError("请输入文本描述")
+            raise ValueError("Please enter a text description")
         vector = engine.encode_text(query)
         summary = {"mode": "text", "text": query}
     elif query_mode == "image":
         image_id = (query_inputs.get("image_id") or "").strip()
         if not image_id:
-            raise ValueError("请输入图像 ID")
+            raise ValueError("Please enter an image ID")
         vector = engine.image_embedding(image_id)
         summary = {
             "mode": "image",
@@ -561,7 +564,7 @@ def _execute_search(
     else:
         caption_id = (query_inputs.get("caption_id") or "").strip()
         if not caption_id:
-            raise ValueError("请选择或输入标注 ID")
+            raise ValueError("Please select or enter a caption ID")
         vector, record = engine.caption_embedding(caption_id)
         summary = {
             "mode": "caption",
@@ -582,65 +585,66 @@ def _render_results(
     backend: BackendInfo,
     results: list[dict[str, Any]],
 ) -> None:
-    st.subheader("检索结果")
-    with st.expander("查询信息", expanded=True):
+    st.subheader("Search Results")
+    with st.expander("Query Information", expanded=True):
         st.write(
             {
-                "模式": {"text": "文本", "image": "图像", "caption": "标注"}[
+                "Mode": {"text": "Text", "image": "Image", "caption": "Caption"}[
                     summary.get("mode", "text")
                 ],
-                "后端": backend.label,
-                "相似度指标": backend.metric,
+                "Backend": backend.label,
+                "Similarity Metric": backend.metric,
             }
         )
         if summary.get("mode") == "text":
-            st.markdown(f"**查询文本：** {summary.get('text', '')}")
+            st.markdown(f"**Query Text:** {summary.get('text', '')}")
         elif summary.get("mode") == "image":
-            st.markdown(f"**图像 ID：** {summary.get('id', '')}")
+            st.markdown(f"**Image ID:** {summary.get('id', '')}")
         else:
-            caption_text = summary.get("caption") or "(无文本)"
-            st.markdown(f"**标注：** {caption_text}")
+            caption_text = summary.get("caption") or "(No text)"
+            st.markdown(f"**Caption:** {caption_text}")
 
     if not results:
-        st.info("未找到匹配结果。")
+        st.info("No matching results found.")
         return
 
     columns = st.columns(3)
     for index, item in enumerate(results):
         column = columns[index % 3]
         with column:
-            st.markdown(f"### #{item['rank']} · 图像 {item['id']}")
+            st.markdown(f"### #{item['rank']} · Image {item['id']}")
             image_path = Path(item.get("image_path", ""))
             if image_path.exists():
                 st.image(str(image_path), use_container_width=True)
             st.caption(
-                f"相似度：{item['score']:.4f} · 距离：{item['distance']:.4f} ({item['metric']})"
+                f"Similarity: {item['score']:.4f} · "
+                f"Distance: {item['distance']:.4f} ({item['metric']})"
             )
-            caption = item.get("caption") or "暂无描述"
+            caption = item.get("caption") or "No description"
             st.write(caption)
             extra = item.get("captions", [])[1:]
             if extra:
-                with st.expander("更多标注"):
+                with st.expander("More Captions"):
                     for cap in extra:
-                        st.markdown(f"- {cap.get('caption') or '(无文本)'}")
+                        st.markdown(f"- {cap.get('caption') or '(No text)'}")
 
 
 def main() -> None:
     st.set_page_config(
-        page_title="Flickr30k 图像检索演示",
+        page_title="Flickr30k Image Search Demo",
         page_icon="🔍",
         layout="wide",
     )
-    st.title("🔍 Flickr30k 图像检索")
-    st.caption("使用 Jina v4 编码器的快速向量检索体验")
+    st.title("🔍 Flickr30k Image Search")
+    st.caption("Fast vector retrieval experience with Jina v4 encoder")
 
     engine = load_engine()
     status = engine.status()
 
     stats_col1, stats_col2, stats_col3 = st.columns(3)
-    stats_col1.metric("图像数量", f"{status.get('image_count', 0):,}")
-    stats_col2.metric("标注数量", f"{status.get('caption_count', 0):,}")
-    stats_col3.metric("可选后端", f"{len(status.get('methods', []))}")
+    stats_col1.metric("Image Count", f"{status.get('image_count', 0):,}")
+    stats_col2.metric("Caption Count", f"{status.get('caption_count', 0):,}")
+    stats_col3.metric("Optional Backends", f"{len(status.get('methods', []))}")
 
     backend_id, top_k, query_mode = _render_sidebar(status)
 
@@ -648,33 +652,33 @@ def main() -> None:
     query_inputs: dict[str, Any] = {}
 
     with st.form("search_form", clear_on_submit=False):
-        st.subheader("输入查询")
+        st.subheader("Enter Query")
         if query_mode == "text":
             query_inputs["query"] = st.text_area(
-                "请输入要检索的文本描述",
-                placeholder="一只正在草地上奔跑的金毛犬",
+                "Please enter the text description to retrieve",
+                placeholder="A golden retriever running on the grass",
             )
         elif query_mode == "image":
             query_inputs["image_id"] = st.text_input(
-                "请输入图像 ID",
-                placeholder="例如：1000092795",
+                "Please enter an image ID",
+                placeholder="Example: 1000092795",
             )
         else:
             selected_id = ""
             if samples:
                 labels = [_format_caption_option(item) for item in samples]
-                selected_label = st.selectbox("选择示例标注", labels)
+                selected_label = st.selectbox("Select sample caption", labels)
                 selected_index = labels.index(selected_label)
                 selected_id = samples[selected_index]["id"]
-                st.caption("也可以在下方输入任意标注 ID 覆盖选择")
-            manual_id = st.text_input("标注 ID", value="")
+                st.caption("You can also enter a caption ID below to override.")
+            manual_id = st.text_input("Caption ID", value="")
             query_inputs["caption_id"] = manual_id.strip() or selected_id
 
-        submitted = st.form_submit_button("开始检索", use_container_width=True)
+        submitted = st.form_submit_button("Start Search", use_container_width=True)
 
     if submitted:
         try:
-            with st.spinner("正在检索…"):
+            with st.spinner("Searching..."):
                 summary, backend_info, results = _execute_search(
                     engine,
                     backend_id=backend_id,
@@ -683,14 +687,14 @@ def main() -> None:
                     query_inputs=query_inputs,
                 )
         except KeyError as exc:
-            st.error(f"无法找到指定的 ID：{exc}")
+            st.error(f"Could not find the specified ID: {exc}")
             logger.exception("Missing identifier")
             return
         except ValueError as exc:
             st.warning(str(exc))
             return
         except Exception as exc:  # pragma: no cover - interactive feedback
-            st.error(f"检索过程中出现错误：{exc}")
+            st.error(f"An error occurred during the search process: {exc}")
             logger.exception("Search failed")
             return
 
