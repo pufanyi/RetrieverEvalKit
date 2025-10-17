@@ -190,6 +190,7 @@ class Flickr30kSearchEngine:
         self,
         *,
         method_filter: Iterable[str] | None = None,
+        load_captions: bool = True,
         progress_callback: Callable[[float, str, float], None] | None = None,
     ) -> dict[str, float]:
         start_time = time.perf_counter()
@@ -206,17 +207,19 @@ class Flickr30kSearchEngine:
             ]
             if unknown:
                 raise KeyError(
-                    "Unknown backend identifiers: {}".format(", ".join(sorted(unknown)))
+                    "Unknown backend identifiers: {}".format(
+                        ", ".join(sorted(unknown))
+                    )
                 )
 
         if method_filter is None:
             ordered_ids = [str(method["id"]) for method in _DEFAULT_METHODS]
         else:
-            ordered_ids = [
-                str(method["id"])
-                for method in _DEFAULT_METHODS
-                if str(method["id"]) in requested_ids
-            ]
+            ordered_ids = []
+            for method in _DEFAULT_METHODS:
+                identifier = str(method["id"])
+                if identifier in requested_ids:
+                    ordered_ids.append(identifier)
 
         with self._build_lock:
             pending_backends = [
@@ -224,7 +227,24 @@ class Flickr30kSearchEngine:
                 for identifier in ordered_ids
                 if identifier not in self._backends
             ]
-            dataset_steps = 3 if not self._data_loaded else 0
+
+            images_needed = self._image_vectors is None
+            caption_embeddings_needed = load_captions and self._caption_vectors is None
+            metadata_needed = load_captions and (
+                caption_embeddings_needed
+                or not self._caption_metadata
+                or not self._image_captions
+                or not self._caption_samples
+            )
+
+            dataset_steps = 0
+            if images_needed:
+                dataset_steps += 1
+            if caption_embeddings_needed:
+                dataset_steps += 1
+            if metadata_needed:
+                dataset_steps += 1
+
             total_steps = dataset_steps + len(pending_backends)
 
             if total_steps == 0:
@@ -248,7 +268,7 @@ class Flickr30kSearchEngine:
                         time.perf_counter() - start_time,
                     )
 
-            if not self._data_loaded:
+            if images_needed:
                 notify(0.0, "Loading Flickr30k image embeddings...")
                 step_start = time.perf_counter()
                 logger.info(
@@ -277,7 +297,11 @@ class Flickr30kSearchEngine:
                     len(self._image_ids),
                     self._image_vectors.shape[1],
                 )
+                if not load_captions:
+                    logger.info("Skipping caption embeddings during startup")
 
+            caption_dataset = None
+            if caption_embeddings_needed:
                 notify(
                     completed_steps / total_steps,
                     "Loading Flickr30k caption embeddings...",
@@ -300,7 +324,9 @@ class Flickr30kSearchEngine:
                     str(identifier): index
                     for index, identifier in enumerate(caption_ids)
                 }
-                timings["load_caption_embeddings"] = time.perf_counter() - step_start
+                timings["load_caption_embeddings"] = (
+                    time.perf_counter() - step_start
+                )
                 completed_steps += 1
                 notify(
                     completed_steps / total_steps,
@@ -311,12 +337,16 @@ class Flickr30kSearchEngine:
                     len(self._caption_lookup),
                     self._caption_vectors.shape[1],
                 )
+            elif metadata_needed:
+                caption_dataset = load_embedding_dataset(self.settings.caption_dataset)
 
+            if metadata_needed:
                 notify(
                     completed_steps / total_steps,
                     "Preparing caption metadata...",
                 )
                 step_start = time.perf_counter()
+                assert caption_dataset is not None
                 self._caption_metadata.clear()
                 self._image_captions.clear()
                 for row in caption_dataset:
@@ -348,11 +378,21 @@ class Flickr30kSearchEngine:
                     for cid in sample_ids
                     if cid in self._caption_metadata
                 ]
-                timings["prepare_caption_metadata"] = time.perf_counter() - step_start
+                timings["prepare_caption_metadata"] = (
+                    time.perf_counter() - step_start
+                )
                 completed_steps += 1
-                notify(completed_steps / total_steps, "Caption metadata prepared")
-                self._data_loaded = True
+                notify(
+                    completed_steps / total_steps,
+                    "Caption metadata prepared",
+                )
+
+            if self._image_vectors is not None:
                 self._ready = True
+            self._data_loaded = (
+                self._image_vectors is not None and self._caption_vectors is not None
+            )
+            if self._data_loaded and metadata_needed:
                 logger.info("Flickr30k embeddings loaded")
 
             if self._image_vectors is None:
@@ -494,6 +534,11 @@ class Flickr30kSearchEngine:
         self._require_ready()
         return self._caption_metadata.get(caption_id)
 
+    def ensure_data_loaded(self) -> None:
+        if self._image_vectors is not None:
+            return
+        self.prepare(method_filter=[], load_captions=False)
+
     def load_encoder(self) -> JinaV4Encoder:
         encoder = self._encoder
         if encoder is not None:
@@ -586,6 +631,22 @@ class Flickr30kSearchEngine:
             "ready": self._ready,
             "image_count": len(self._image_ids),
             "caption_count": len(self._caption_lookup),
+            "images_loaded": self._image_vectors is not None,
+            "caption_embeddings_loaded": self._caption_vectors is not None,
+            "image_dataset": {
+                "name": self.settings.image_dataset.dataset_name,
+                "config": self.settings.image_dataset.dataset_config,
+                "split": self.settings.image_dataset.split,
+            } if self.settings.image_dataset else None,
+            "caption_dataset": (
+                {
+                    "name": self.settings.caption_dataset.dataset_name,
+                    "config": self.settings.caption_dataset.dataset_config,
+                    "split": self.settings.caption_dataset.split,
+                }
+                if self.settings.caption_dataset
+                else None
+            ),
             "image_root": (
                 str(self.settings.image_root) if self.settings.image_root else None
             ),
@@ -617,6 +678,7 @@ class Flickr30kSearchEngine:
 @st.cache_resource()
 def load_engine(settings: DemoSettings | None = None) -> Flickr30kSearchEngine:
     engine = Flickr30kSearchEngine(settings or DemoSettings())
+    engine.ensure_data_loaded()
     engine.load_encoder()
     return engine
 
@@ -786,6 +848,30 @@ def main() -> None:
     stats_col2.metric("Caption Count", f"{status.get('caption_count', 0):,}")
     stats_col3.metric("Loaded Backends", f"{len(status.get('methods', []))}")
 
+    overview_col1, overview_col2 = st.columns([2, 1])
+    dataset_info = status.get("image_dataset") or {}
+    caption_loaded = bool(status.get("caption_embeddings_loaded"))
+    with overview_col1:
+        st.markdown(
+            "## Quick Start\n"
+            "- **Image embeddings**: cached and ready for index builds.\n"
+            f"- **Caption embeddings**: {'ready' if caption_loaded else 'will load on demand'}.\n"
+            "- **Next step**: pick a retrieval backend tab below and click *Load*."
+        )
+    with overview_col2:
+        image_root = status.get("image_root") or str(engine.settings.image_root)
+        st.markdown(
+            "## Data Sources\n"
+            f"- Dataset: `{dataset_info.get('name', 'unknown')}`\n"
+            f"- Config: `{dataset_info.get('config', '-')}`\n"
+            f"- Split: `{dataset_info.get('split', '-')}`\n"
+            f"- Images dir: `{image_root}`"
+        )
+    if not caption_loaded:
+        st.info(
+            "Caption embeddings load the first time you search by caption, keeping startup lightweight."
+        )
+
     top_k, query_mode = _render_sidebar(status)
 
     method_specs = list(_DEFAULT_METHODS)
@@ -794,7 +880,7 @@ def main() -> None:
 
     samples = status.get("sample_captions", [])
 
-    for spec, tab in zip(method_specs, tabs, strict=True):
+    for spec, tab in zip(method_specs, tabs, strict=False):
         method_id = str(spec["id"])
         label = str(spec["label"])
         backend_name = str(spec.get("backend", "")).upper()
