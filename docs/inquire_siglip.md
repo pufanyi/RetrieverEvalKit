@@ -47,6 +47,40 @@ Query vectors for the benchmark live in the same Hub dataset under the `queries`
 configuration. They store SigLIP text embeddings alongside the INQUIRE metadata with an
 `image_id` relevance column referencing the gallery.
 
+## Generate Query Embeddings
+
+SigLIP text vectors for INQUIRE queries can be materialised directly from the public
+CSV releases. The helper script downloads the annotations, encodes the query texts with
+SigLIP, and emits Hugging Face compatible Parquet shards:
+
+```bash
+uv run python scripts/prepare_data/embed_inquire_queries.py \
+  --output-dir outputs/inquire/query_embeddings \
+  --dataset-name inquire_siglip \
+  --batch-size 128 \
+  --chunk-size 1024 \
+  --overwrite
+```
+
+- `--splits` defaults to `test` and `val`; pass a subset to restrict processing.
+- Set `--device cpu` when GPUs are unavailable, or override `--model-name` for
+  experimentation.
+- Use `--limit` to run quick smoke tests without processing the full benchmark.
+
+Push the generated shards to the Hub with:
+
+```bash
+uv run python scripts/prepare_data/embed_inquire_queries.py \
+  --push-to-hub \
+  --hf-repo-id pufanyi/inquire-siglip-so400m-queries \
+  --hf-token $HUGGINGFACE_TOKEN \
+  --overwrite
+```
+
+The upload registers a `queries` configuration containing `image_id` relevance lists that
+match the gallery identifiers, so the search benchmark can join the splits without
+additional preprocessing.
+
 ## Evaluate Retrieval
 
 Hydra presets are bundled for the new dataset. Point the search benchmark at the SigLIP

@@ -120,15 +120,21 @@ class SiglipEncoder(Encoder):
         with torch.no_grad():
             if images:
                 processed_images = [load_image(image) for image in images]
-                inputs = self.processor(
-                    images=processed_images, return_tensors="pt"
-                ).to(self.device)
+                image_kwargs = dict(kwargs)
+                image_kwargs.setdefault("return_tensors", "pt")
+                inputs = self.processor(images=processed_images, **image_kwargs).to(
+                    self.device
+                )
                 if isinstance(model, torch.nn.DataParallel):
                     return model(**inputs)
                 return model.get_image_features(**inputs)
 
             if texts:
-                inputs = self.processor(text=texts, return_tensors="pt").to(self.device)
+                text_kwargs = dict(kwargs)
+                text_kwargs.setdefault("padding", True)
+                text_kwargs.setdefault("truncation", True)
+                text_kwargs.setdefault("return_tensors", "pt")
+                inputs = self.processor(text=texts, **text_kwargs).to(self.device)
                 if isinstance(model, torch.nn.DataParallel):
                     assert self._model is not None
                     return self._model.get_text_features(**inputs)
