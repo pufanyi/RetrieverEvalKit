@@ -6,8 +6,8 @@ from __future__ import annotations
 import argparse
 import logging
 import re
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Iterable, Sequence
 
 import numpy as np
 import pandas as pd
@@ -24,7 +24,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Convert INQUIRE image embeddings stored as NumPy/Parquet pairs into "
-            "Parquet shards that can be loaded with `datasets.load_dataset('parquet', ...)`."
+            "Parquet shards that can be loaded with "
+            "`datasets.load_dataset('parquet', ...)`."
         )
     )
     parser.add_argument(
@@ -174,9 +175,7 @@ def main() -> None:
     )
     if args.push_to_hub:
         if args.hf_repo_id is None:
-            raise ValueError(
-                "--hf-repo-id must be specified when using --push-to-hub."
-            )
+            raise ValueError("--hf-repo-id must be specified when using --push-to-hub.")
         shard_paths = sorted(args.output_dir.glob(f"{args.split}-*.parquet"))
         if not shard_paths:
             raise FileNotFoundError(
@@ -194,7 +193,9 @@ def main() -> None:
         )
 
 
-def collect_shard_pairs(metadata_dir: Path, embeddings_dir: Path) -> list[tuple[str, Path, Path]]:
+def collect_shard_pairs(
+    metadata_dir: Path, embeddings_dir: Path
+) -> list[tuple[str, Path, Path]]:
     """Match metadata_* parquet shards with img_emb_* numpy shards."""
 
     def _index(path: Path, prefix: str) -> str:
@@ -230,9 +231,7 @@ def collect_shard_pairs(metadata_dir: Path, embeddings_dir: Path) -> list[tuple[
         set(metadata_files) & set(embedding_files), key=lambda value: int(value)
     )
     if not common_indices:
-        raise FileNotFoundError(
-            "No matching metadata/img_emb shard pairs were found."
-        )
+        raise FileNotFoundError("No matching metadata/img_emb shard pairs were found.")
 
     return [
         (index, metadata_files[index], embedding_files[index])
@@ -303,9 +302,7 @@ def convert_shard(
                 )
             writer.write_table(chunk_table)
             rows_written += chunk_table.num_rows
-            logging.debug(
-                "Wrote rows %d-%d for %s.", start, stop - 1, output_path.name
-            )
+            logging.debug("Wrote rows %d-%d for %s.", start, stop - 1, output_path.name)
             if limit is not None and rows_written >= rows_to_write:
                 break
     finally:
@@ -348,9 +345,7 @@ def build_arrow_table(
         np.ascontiguousarray(embeddings).reshape(-1),
         type=pa.float16(),
     )
-    embedding_array = pa.FixedSizeListArray.from_arrays(
-        embedding_flat, embedding_dim
-    )
+    embedding_array = pa.FixedSizeListArray.from_arrays(embedding_flat, embedding_dim)
     model_array = pa.array([model_name] * num_rows, type=pa.string())
     dataset_array = pa.array([dataset_name] * num_rows, type=pa.string())
 
