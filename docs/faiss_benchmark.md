@@ -90,6 +90,22 @@ The image split stores one vector per Flickr30k photo under the `id` column,
 while the caption split includes five caption embeddings per image and uses the
 `image_id` column for relevance labels.
 
+Need INQUIRE coverage instead? The
+[`pufanyi/inquire-siglip`](https://huggingface.co/datasets/pufanyi/inquire-siglip)
+dataset mirrors the same layout with SigLIP embeddings for the INQUIRE gallery
+and queries. Point the benchmark at the new config pair to load it directly
+from the Hub:
+
+```bash
+uv run python -m img_search.search.evaluate \
+  image_dataset=inquire_siglip \
+  query_dataset=inquire_siglip
+```
+
+Both configs assume the Hub repo exposes `gallery` and `queries` configurations
+with an `image_id` relevance column. Override any field at invocation time if
+you maintain a fork with different split names or identifier columns.
+
 ## Running the Benchmark
 
 Once the datasets and configs are in place, launch the benchmark either through
