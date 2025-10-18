@@ -8,11 +8,11 @@ inside the ANN evaluation tools that ship with this repository.
 
 The `InquireDataset` loader now surfaces the `inat24_file_name` column as a stable
 identifier so each image is saved with a deterministic ID. Run the embedding pipeline
-with the SigLIP2 model to produce gallery vectors:
+with the SigLIP encoder to produce gallery vectors:
 
 ```bash
 uv run python -m img_search.pipeline.embed \
-  models=siglip2 \
+  models=siglip \
   datasets=inquire \
   tasks.batch_size=256 \
   output_path=outputs/inquire/siglip-gallery.parquet
@@ -55,8 +55,19 @@ configs to reproduce the FAISS/ScaNN numbers:
 ```bash
 uv run python -m img_search.search.evaluate \
   image_dataset=inquire_siglip \
-  query_dataset=inquire_siglip
+  query_dataset=inquire_siglip \
+  evaluation=faiss_only
 ```
 
-Both configurations default to the hosted Hub dataset. Swap `image_dataset` or
-`query_dataset` to `inquire_local` (or a custom file) if you maintain private shards.
+- The default evaluation preset (`evaluation=default`) compares FAISS (Flat/IVF/HNSW),
+  ScaNN, and HNSWlib side by side; switch to `faiss_only` for quicker sweeps.
+- Override `evaluation.recall_at`, `evaluation.top_k`, or individual method settings
+  inline; for example add
+  `+evaluation.methods.1='{backend: faiss, method: ivf_pq, metric: cosine, nlist: 2048, nprobe: 32}'`
+  to explore IVF-PQ.
+- Both dataset configs default to the hosted Hub repo. Swap `image_dataset` or
+  `query_dataset` to `inquire_local` (or your custom files) when benchmarking local
+  shards.
+- Persist raw scores with `evaluation.output_path=outputs/inquire/results.csv` to capture
+  recall/latency tables for downstream analysis. The CLI also prints a Rich table with
+  per-backend metrics.

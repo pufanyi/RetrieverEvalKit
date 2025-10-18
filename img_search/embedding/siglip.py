@@ -1,5 +1,5 @@
 import logging
-from typing import override
+from typing import Any, override
 
 import torch
 from PIL import Image
@@ -10,9 +10,9 @@ from .encoder import Encoder
 
 
 class _SiglipImageModule(torch.nn.Module):
-    """Wraps the backbone to expose a forward expected by DataParallel."""
+    """Wraps the image forward pass for DataParallel execution."""
 
-    def __init__(self, backbone: AutoModel):
+    def __init__(self, backbone: torch.nn.Module):
         super().__init__()
         self.backbone = backbone
 
@@ -20,15 +20,17 @@ class _SiglipImageModule(torch.nn.Module):
         return self.backbone.get_image_features(**inputs)
 
 
-class Siglip2Encoder(Encoder):
+class SiglipEncoder(Encoder):
+    """Encoder powered by `google/siglip` checkpoints."""
+
     def __init__(
         self,
-        model_name: str = "google/siglip2-base-patch32-256",
+        model_name: str = "google/siglip-so400m-patch14-384",
         device_map: str | None = "auto",
         device: str | torch.device | None = None,
         data_parallel: bool = False,
-    ):
-        super().__init__("Siglip2")
+    ) -> None:
+        super().__init__("Siglip")
         self.model_name = model_name
         self.device_map = device_map
         self._requested_device = device
@@ -38,10 +40,10 @@ class Siglip2Encoder(Encoder):
         self._parallel_model: torch.nn.Module | None = None
         self._processor: AutoProcessor | None = None
 
-    def build(self):
+    def build(self) -> None:
         logger = logging.getLogger(__name__)
 
-        load_kwargs: dict[str, object] = {}
+        load_kwargs: dict[str, Any] = {}
         use_data_parallel = self._data_parallel and torch.cuda.device_count() > 1
 
         if use_data_parallel:
@@ -61,8 +63,7 @@ class Siglip2Encoder(Encoder):
 
         if use_data_parallel:
             backbone.to(target_device)
-            parallel_model = torch.nn.DataParallel(_SiglipImageModule(backbone))
-            self._parallel_model = parallel_model
+            self._parallel_model = torch.nn.DataParallel(_SiglipImageModule(backbone))
             self._device = target_device
         else:
             self._parallel_model = None
@@ -78,8 +79,8 @@ class Siglip2Encoder(Encoder):
 
         if self._data_parallel and not use_data_parallel:
             logger.warning(
-                "Data parallel requested but only detected {} CUDA device(s); "
-                "falling back to {}.",
+                "Data parallel requested but only detected %d CUDA device(s); "
+                "falling back to %s.",
                 torch.cuda.device_count(),
                 self._device,
             )
@@ -88,11 +89,12 @@ class Siglip2Encoder(Encoder):
         self._processor = AutoProcessor.from_pretrained(self.model_name)
 
     @property
-    def model(self):
+    def model(self) -> torch.nn.Module:
         if self._model is None:
             self.build()
         if self._parallel_model is not None:
             return self._parallel_model
+        assert self._model is not None
         return self._model
 
     @property
@@ -100,9 +102,10 @@ class Siglip2Encoder(Encoder):
         return self._device
 
     @property
-    def processor(self):
+    def processor(self) -> AutoProcessor:
         if self._processor is None:
             self.build()
+        assert self._processor is not None
         return self._processor
 
     @override
