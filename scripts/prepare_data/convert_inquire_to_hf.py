@@ -7,7 +7,7 @@ import argparse
 import logging
 import re
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Sequence
 
 import numpy as np
 import pandas as pd
@@ -43,13 +43,25 @@ def parse_args() -> argparse.Namespace:
         "--output-dir",
         type=Path,
         default=DEFAULT_OUTPUT_DIR,
-            help="Destination directory for Parquet shards in Hugging Face format.",
+        help="Destination directory for Parquet shards in Hugging Face format.",
     )
     parser.add_argument(
         "--split",
         type=str,
         default="train",
         help="Split name to embed in output filenames.",
+    )
+    parser.add_argument(
+        "--model-name",
+        type=str,
+        default="jinaai/jina-embeddings-v4",
+        help="Model identifier to store alongside embeddings.",
+    )
+    parser.add_argument(
+        "--dataset-name",
+        type=str,
+        default="inquire",
+        help="Dataset identifier to store alongside embeddings.",
     )
     parser.add_argument(
         "--chunk-size",
@@ -67,6 +79,40 @@ def parse_args() -> argparse.Namespace:
         "--overwrite",
         action="store_true",
         help="Overwrite any existing Parquet shards in the output directory.",
+    )
+    parser.add_argument(
+        "--push-to-hub",
+        action="store_true",
+        help="Upload the generated shards to the Hugging Face Hub.",
+    )
+    parser.add_argument(
+        "--hf-repo-id",
+        type=str,
+        default=None,
+        help="Target Hugging Face dataset repository (e.g. user/inquire-embeddings).",
+    )
+    parser.add_argument(
+        "--hf-config-name",
+        type=str,
+        default="images",
+        help="Configuration name to publish when pushing to the Hub.",
+    )
+    parser.add_argument(
+        "--hf-token",
+        type=str,
+        default=None,
+        help="Optional Hugging Face API token; falls back to cached token if omitted.",
+    )
+    parser.add_argument(
+        "--hf-private",
+        action="store_true",
+        help="Create or update the Hub dataset as private.",
+    )
+    parser.add_argument(
+        "--hf-commit-message",
+        type=str,
+        default=None,
+        help="Optional commit message to use when pushing to the Hub.",
     )
     parser.add_argument(
         "--log-level",
@@ -104,13 +150,16 @@ def main() -> None:
         if remaining is not None and remaining <= 0:
             break
 
+        output_path = shard_output_path(args.output_dir, args.split, index)
         written = convert_shard(
             metadata_path=metadata_path,
             embedding_path=embedding_path,
-            output_path=shard_output_path(args.output_dir, args.split, index),
+            output_path=output_path,
             chunk_size=args.chunk_size,
             overwrite=args.overwrite,
             limit=remaining,
+            model_name=args.model_name,
+            dataset_name=args.dataset_name,
         )
         total_written += written
         if written:
@@ -123,6 +172,26 @@ def main() -> None:
         total_written,
         shards_converted,
     )
+    if args.push_to_hub:
+        if args.hf_repo_id is None:
+            raise ValueError(
+                "--hf-repo-id must be specified when using --push-to-hub."
+            )
+        shard_paths = sorted(args.output_dir.glob(f"{args.split}-*.parquet"))
+        if not shard_paths:
+            raise FileNotFoundError(
+                f"No Parquet shards matching '{args.split}-*.parquet' found in "
+                f"{args.output_dir}."
+            )
+        push_to_hub(
+            shards=shard_paths,
+            split=args.split,
+            repo_id=args.hf_repo_id,
+            config_name=args.hf_config_name,
+            token=args.hf_token,
+            private=args.hf_private,
+            commit_message=args.hf_commit_message,
+        )
 
 
 def collect_shard_pairs(metadata_dir: Path, embeddings_dir: Path) -> list[tuple[str, Path, Path]]:
@@ -184,6 +253,8 @@ def convert_shard(
     chunk_size: int,
     overwrite: bool,
     limit: int | None,
+    model_name: str,
+    dataset_name: str,
 ) -> int:
     """Convert a single Parquet/NumPy shard pair."""
     if output_path.exists():
@@ -221,6 +292,8 @@ def convert_shard(
                 metadata_series.iloc[start:stop],
                 embeddings[start:stop],
                 embedding_dim=embedding_dim,
+                model_name=model_name,
+                dataset_name=dataset_name,
             )
             if chunk_table.num_rows == 0:
                 continue
@@ -260,6 +333,8 @@ def build_arrow_table(
     embeddings: np.ndarray,
     *,
     embedding_dim: int,
+    model_name: str,
+    dataset_name: str,
 ) -> pa.Table:
     """Build a PyArrow table for a single chunk."""
     if embeddings.shape[0] != len(paths):
@@ -267,6 +342,7 @@ def build_arrow_table(
     if embeddings.shape[0] == 0:
         return pa.table({})
 
+    num_rows = len(paths)
     ids = pa.array(paths.astype(str).tolist(), type=pa.string())
     embedding_flat = pa.array(
         np.ascontiguousarray(embeddings).reshape(-1),
@@ -275,11 +351,73 @@ def build_arrow_table(
     embedding_array = pa.FixedSizeListArray.from_arrays(
         embedding_flat, embedding_dim
     )
+    model_array = pa.array([model_name] * num_rows, type=pa.string())
+    dataset_array = pa.array([dataset_name] * num_rows, type=pa.string())
 
     return pa.Table.from_arrays(
-        [ids, ids, embedding_array],
-        names=["id", "image_path", "embedding"],
+        [ids, ids, model_array, dataset_array, embedding_array],
+        names=["id", "image_path", "model_name", "dataset_name", "embedding"],
     )
+
+
+def push_to_hub(
+    *,
+    shards: Sequence[Path],
+    split: str,
+    repo_id: str,
+    config_name: str,
+    token: str | None,
+    private: bool,
+    commit_message: str | None,
+) -> None:
+    """Upload generated Parquet shards to the Hugging Face Hub."""
+    if not shards:
+        raise ValueError("No Parquet shards were generated; nothing to upload.")
+
+    try:
+        from datasets import load_dataset
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise ImportError(
+            "datasets is required to push to the Hugging Face Hub."
+        ) from exc
+
+    try:
+        from huggingface_hub import HfApi
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise ImportError(
+            "huggingface_hub is required to push to the Hugging Face Hub."
+        ) from exc
+
+    shard_paths = [str(path) for path in shards]
+    logging.info(
+        "Uploading %d shard(s) to %s (config=%s, split=%s).",
+        len(shard_paths),
+        repo_id,
+        config_name,
+        split,
+    )
+    api = HfApi(token=token)
+    api.create_repo(
+        repo_id=repo_id,
+        repo_type="dataset",
+        exist_ok=True,
+        private=private,
+    )
+
+    data_files = {split: shard_paths}
+    logging.info("Loading dataset from local Parquet shards for validation...")
+    dataset_dict = load_dataset("parquet", data_files=data_files)
+    dataset_split = dataset_dict[split]
+    logging.info("Pushing %d rows to the Hugging Face Hub...", len(dataset_split))
+    dataset_split.push_to_hub(
+        repo_id=repo_id,
+        token=token,
+        config_name=config_name,
+        private=private,
+        commit_message=commit_message,
+        split=split,
+    )
+    logging.info("✅ Successfully pushed dataset to %s.", repo_id)
 
 
 if __name__ == "__main__":

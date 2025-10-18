@@ -1,0 +1,13 @@
+dataset_name: parquet
+dataset_config: null
+data_files:
+  train: outputs/inquire/hf/train-*.parquet
+split: train
+revision: null
+load_from_disk: null
+id_column: id
+embedding_column: embedding
+metadata_columns:
+  - image_path
+  - model_name
+  - dataset_name
