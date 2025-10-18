@@ -24,7 +24,7 @@ db = EmbeddingDatabase(
 db.add_embeddings(
     ids=["cat-1", "cat-2"],
     embeddings=[cat_vector, another_cat_vector],
-    model_name="siglip2",
+    model_name="siglip",
     dataset_name="cats",
 )
 

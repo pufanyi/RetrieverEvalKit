@@ -104,7 +104,9 @@ uv run python -m img_search.search.evaluate \
 
 Both configs assume the Hub repo exposes `gallery` and `queries` configurations
 with an `image_id` relevance column. Override any field at invocation time if
-you maintain a fork with different split names or identifier columns.
+you maintain a fork with different split names or identifier columns. See
+[docs/inquire_siglip.md](inquire_siglip.md) for guidance on producing and
+publishing SigLIP embeddings for INQUIRE.
 
 ## Running the Benchmark
 

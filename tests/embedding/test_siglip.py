@@ -10,11 +10,11 @@ torch = pytest.importorskip("torch")
 
 
 @pytest.fixture(scope="module")
-def siglip2_encoder():
+def siglip_encoder():
     cfg = OmegaConf.create(
         {
-            "model": "siglip2",
-            "model_name": "google/siglip2-base-patch32-256",
+            "model": "siglip",
+            "model_name": "google/siglip-base-patch16-224",
             "data_parallel": False,
         }
     )
@@ -39,21 +39,19 @@ def _vision_hidden_size(encoder) -> int:
     return config.vision_config.hidden_size
 
 
-def test_siglip2_encode_image(siglip2_encoder, sample_image: Image.Image):
+def test_siglip_encode_image(siglip_encoder, sample_image: Image.Image):
     """Verify that encoding an image returns an embedding of correct shape and type."""
-    embedding = siglip2_encoder.encode(image=sample_image)
+    embedding = siglip_encoder.encode(image=sample_image)
 
     assert isinstance(embedding, torch.Tensor)
-    assert embedding.shape == (_vision_hidden_size(siglip2_encoder),)
+    assert embedding.shape == (_vision_hidden_size(siglip_encoder),)
     assert embedding.dtype == torch.float32
 
 
-def test_siglip2_encode_text(siglip2_encoder):
+def test_siglip_encode_text(siglip_encoder):
     """Verify that encoding text returns an embedding of correct shape and type."""
-    text_embedding = siglip2_encoder.encode(
-        text="A big white dog with a small yellow dog"
-    )
+    text_embedding = siglip_encoder.encode(text="A curious bird on a mossy branch")
 
     assert isinstance(text_embedding, torch.Tensor)
-    assert text_embedding.shape == (_vision_hidden_size(siglip2_encoder),)
+    assert text_embedding.shape == (_vision_hidden_size(siglip_encoder),)
     assert text_embedding.dtype == torch.float32

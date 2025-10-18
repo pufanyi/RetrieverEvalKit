@@ -13,6 +13,11 @@ accelerate launch --num_processes 8 --mixed_precision bf16 \
   tasks.batch_size=1024
 ```
 
+## INQUIRE SigLIP
+
+Follow [docs/inquire_siglip.md](docs/inquire_siglip.md) to generate SigLIP embeddings
+for INQUIRE and evaluate them with the bundled FAISS/ScaNN harness.
+
 ## Flickr30k search demo
 
 A FastAPI-based front-end for exploring the Flickr30k embeddings is available at

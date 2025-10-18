@@ -10,7 +10,7 @@
 ## Build, Test, and Development Commands
 - `uv sync --dev` installs the pinned runtime and dev-only dependencies.
 - `uv run pytest -n auto` runs the full suite in parallel; narrow focus with `uv run pytest tests/embedding/test_jina.py`.
-- `uv run python -m img_search.pipeline.embed` launches the embedding pipeline with Hydra defaults; add overrides such as `models=siglip2 datasets=inquire` for experiments.
+- `uv run python -m img_search.pipeline.embed` launches the embedding pipeline with Hydra defaults; add overrides such as `models=siglip datasets=inquire` for experiments.
 - Prefer Accelerate for multi-GPU runs: `uv run accelerate launch img_search/pipeline/embed.py models=jina_v4 models.0.kwargs.use_accelerate=true`.
 - `uv run pre-commit run --all-files` applies Ruff formatting and linting to match CI.
 

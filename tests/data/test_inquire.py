@@ -12,9 +12,21 @@ def mock_load_dataset():
     with patch("img_search.data.inquire.load_dataset") as mock:
         # Create a dummy dataset
         dummy_data = [
-            {"image": Image.new("RGB", (10, 10), color="red")},
-            {"image": Image.new("RGB", (10, 10), color="green")},
-            {"image": Image.new("RGB", (10, 10), color="blue")},
+            {
+                "image": Image.new("RGB", (10, 10), color="red"),
+                "inat24_file_name": "gallery/red.jpg",
+                "inat24_image_id": 1,
+            },
+            {
+                "image": Image.new("RGB", (10, 10), color="green"),
+                "inat24_file_name": "gallery/green.jpg",
+                "inat24_image_id": 2,
+            },
+            {
+                "image": Image.new("RGB", (10, 10), color="blue"),
+                "inat24_file_name": "gallery/blue.jpg",
+                "inat24_image_id": 3,
+            },
         ]
         mock.return_value = dummy_data
         yield mock
@@ -55,6 +67,8 @@ def test_inquire_get_images_batching(mock_load_dataset: MagicMock):
     assert len(batches) == 2
     assert len(batches[0]) == 2
     assert len(batches[1]) == 1  # Remainder
+    ids_batch_one = [item[0] for item in batches[0]]
+    assert ids_batch_one == ["gallery/red.jpg", "gallery/green.jpg"]
 
     # Test with batch_size = 3 (exact match)
     batches = list(dataset.get_images(batch_size=3))
@@ -62,5 +76,25 @@ def test_inquire_get_images_batching(mock_load_dataset: MagicMock):
     assert len(batches[0]) == 3
 
     # Verify image types
-    first_image = batches[0][0]
+    first_image = batches[0][0][1]
     assert isinstance(first_image, Image.Image)
+
+
+def test_inquire_identifier_fallback(mock_load_dataset: MagicMock):
+    """Absent identifier columns should fall back to the row index."""
+    fallback_rows = [
+        {"image": Image.new("RGB", (8, 8), color="cyan")},
+        {"image": Image.new("RGB", (8, 8), color="magenta")},
+    ]
+    mock_load_dataset.return_value = fallback_rows
+    dataset = InquireDataset(id_column="missing_column")
+    batches = list(dataset.get_images(batch_size=1))
+    ids = [item[0] for batch in batches for item in batch]
+    assert ids == ["0", "1"]
+
+
+def test_inquire_invalid_batch_size(mock_load_dataset: MagicMock):
+    """Batch size must be positive."""
+    dataset = InquireDataset()
+    with pytest.raises(ValueError):
+        list(dataset.get_images(batch_size=0))

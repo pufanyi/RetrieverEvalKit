@@ -5,10 +5,17 @@ from omegaconf import DictConfig, OmegaConf
 from .encoder import Encoder
 from .jina_v4 import JinaV4Encoder
 from .jina_v4_vllm import JinaV4VLLMEncoder
+from .siglip import SiglipEncoder
 from .siglip2 import Siglip2Encoder
 from .siglip_vllm import SiglipVLLMEncoder
 
-__all__ = ["Siglip2Encoder", "JinaV4Encoder", "JinaV4VLLMEncoder", "SiglipVLLMEncoder"]
+__all__ = [
+    "SiglipEncoder",
+    "Siglip2Encoder",
+    "JinaV4Encoder",
+    "JinaV4VLLMEncoder",
+    "SiglipVLLMEncoder",
+]
 
 
 def _collect_kwargs(cfg: DictConfig) -> dict[str, Any]:
@@ -30,7 +37,9 @@ def _collect_kwargs(cfg: DictConfig) -> dict[str, Any]:
 def get_encoder(cfg: DictConfig) -> Encoder:
     model = cfg.model
     kwargs = _collect_kwargs(cfg)
-    if model == "siglip2":
+    if model == "siglip":
+        return SiglipEncoder(**kwargs)
+    elif model == "siglip2":
         return Siglip2Encoder(**kwargs)
     elif model == "siglip_vllm":
         return SiglipVLLMEncoder(**kwargs)

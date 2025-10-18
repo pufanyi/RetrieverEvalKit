@@ -1,0 +1,2 @@
+- model: siglip
+  model_name: google/siglip-so400m-patch14-384
