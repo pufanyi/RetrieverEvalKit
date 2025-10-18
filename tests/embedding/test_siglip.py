@@ -31,7 +31,11 @@ def sample_image() -> Image.Image:
 
 def _vision_hidden_size(encoder) -> int:
     model = encoder.model
-    config = model.module.config if isinstance(model, torch.nn.DataParallel) else model.config
+    config = (
+        model.module.config
+        if isinstance(model, torch.nn.DataParallel)
+        else model.config
+    )
     return config.vision_config.hidden_size
 
 
