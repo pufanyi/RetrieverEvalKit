@@ -1,9 +1,9 @@
 dataset_name: pufanyi/inquire-siglip-so400m-14-384
-dataset_config: gallery
+dataset_config: images
 data_files: null
-split: test
+split: train
 revision: null
 load_from_disk: null
-id_column: image_id
+id_column: id
 embedding_column: embedding
 metadata_columns: []
