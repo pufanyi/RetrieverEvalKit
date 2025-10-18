@@ -1,0 +1,9 @@
+dataset_name: pufanyi/inquire-siglip
+dataset_config: gallery
+data_files: null
+split: test
+revision: null
+load_from_disk: null
+id_column: image_id
+embedding_column: embedding
+metadata_columns: []
