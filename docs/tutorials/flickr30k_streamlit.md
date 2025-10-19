@@ -80,3 +80,22 @@ captions to make it easier to try the caption-based workflow.
   with FAISS and lists the unavailable backends in the sidebar.
 - When caption/image IDs come from the public dataset they remain strings (as stored in
   Hugging Face). Double-check the ID formatting if lookups fail.
+- If you tweak the Hydra configs backing the demo (see
+  `img_search/frontend/flickr30k_demo.py`), restart Streamlit so the cached datasets and
+  ANN indices rebuild with the new settings.【F:img_search/frontend/flickr30k_demo.py†L18-L156】
+
+## Under the hood
+
+The Streamlit script performs a few key steps during startup:
+
+1. Load the gallery and caption embeddings via `EmbeddingDatasetSpec`, respecting any
+   environment overrides for dataset name or local paths.【F:img_search/frontend/flickr30k_demo.py†L53-L129】
+2. Build FAISS, ScaNN, and HNSWlib indices (skipping optional dependencies) and register
+   them in the sidebar selector.【F:img_search/frontend/flickr30k_demo.py†L26-L152】
+3. Cache image thumbnails using `st.cache_data` to avoid re-reading files on every query and
+   fall back to ID/score listings if thumbnails are unavailable.【F:img_search/frontend/flickr30k_demo.py†L100-L156】
+
+Understanding this flow makes it easier to extend the app—for example, by injecting custom
+filter widgets or swapping in a different embedding dataset. Update the `EmbeddingDatasetSpec`
+instances in `flickr30k_demo.py` or set the environment variables documented above to point
+at your own corpora.【F:img_search/frontend/flickr30k_demo.py†L53-L129】
