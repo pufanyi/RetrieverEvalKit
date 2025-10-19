@@ -6,6 +6,19 @@ Streamlit demo for Flickr30k-style retrieval experiments. The toolkit is driven 
 [Hydra](https://hydra.cc/) configuration files and leans on uv for reproducible
 environments, so production runs match the local developer workflow.
 
+## Table of contents
+
+1. [Feature highlights](#feature-highlights)
+2. [Installation](#installation)
+3. [Core workflows](#core-workflows)
+4. [Hydra configuration primer](#hydra-configuration-primer)
+5. [Embedding datasets and artifacts](#embedding-datasets-and-artifacts)
+6. [Automation scripts](#automation-scripts)
+7. [Project layout](#project-layout)
+8. [Documentation](#documentation)
+9. [Development](#development)
+10. [Publishing embeddings to the Hub](#publishing-embeddings-to-the-hub)
+
 ## Feature Highlights
 
 - **Hydra-configurable embedding pipelines** – The image and caption pipelines in
@@ -37,7 +50,7 @@ uv sync --dev
 The command installs runtime dependencies, Streamlit, optional ANN libraries declared in
 `pyproject.toml`, and development tooling such as Ruff and pytest.【F:pyproject.toml†L1-L136】
 
-## Quickstarts
+## Core workflows
 
 ### Embed image datasets
 
@@ -110,12 +123,47 @@ uv run streamlit run img_search/frontend/flickr30k_demo.py
 Set `FLICKR30K_CAPTION_CONFIG`, `FLICKR30K_IMAGE_ROOT`, or `FLICKR30K_IMAGE_PATTERN` to
 customise the data sources.【F:img_search/frontend/flickr30k_demo.py†L53-L96】
 
-## Outputs
+## Hydra configuration primer
+
+RetrieverEvalKit’s entry points follow the Hydra pattern of composing small YAML files.
+The default embed config (`img_search/config/embed_config.yaml`) combines model, dataset,
+task, logging, and output groups so you can swap components with one-line overrides.
+
+- **Models** live in `img_search/config/models/*.yaml` and map directly to encoder
+  factories registered in `img_search.embedding`. Each config is forwarded to
+  `get_encoder`, which instantiates classes such as `JinaV4Encoder`, `SiglipEncoder`, or
+  their vLLM-backed variants.【F:img_search/embedding/__init__.py†L1-L44】
+- **Datasets** are described under `img_search/config/datasets/*.yaml` and resolve to
+  subclasses of `ImageDataset` or `TextDataset` through the dataset registries, keeping
+  loader logic centralised in `img_search.data`.【F:img_search/data/__init__.py†L1-L48】【F:img_search/data/dataset.py†L1-L63】
+- **Tasks** control batching, device placement, and other runtime knobs consumed inside
+  the embedding pipelines to size progress bars and dataloaders.【F:img_search/pipeline/embed.py†L103-L208】
+
+Override any group inline—`models=jina_v4 datasets=inquire tasks.batch_size=512`—to reuse
+the same scripts across experiments without editing YAML files.
+
+## Embedding datasets and artifacts
 
 Both embedding pipelines emit Apache Parquet files containing Arrow tables with stable
-identifiers, encoder/dataset metadata, and dense embedding vectors. These files are
-compatible with `datasets.load_dataset("parquet")` and the repository’s upload script for
-publishing to the Hugging Face Hub.【F:img_search/pipeline/embed.py†L167-L208】【F:img_search/pipeline/embed_text.py†L170-L227】【F:scripts/upload_to_hub.py†L1-L68】
+identifiers, encoder/dataset metadata, and dense embedding vectors.【F:img_search/pipeline/embed.py†L167-L208】【F:img_search/pipeline/embed_text.py†L170-L227】 The ANN
+benchmark and Streamlit demo load these corpora through
+`EmbeddingDatasetSpec`, which handles Hugging Face datasets, `load_from_disk` directories,
+streaming iteration, and optional NumPy memmaps for out-of-memory workloads.【F:img_search/data/embeddings.py†L1-L200】 Use
+`read_batch_size` and `memmap_path` in the spec to bound memory usage during ANN
+benchmarks.【F:img_search/data/embeddings.py†L115-L198】
+
+## Automation scripts
+
+Helper CLIs wrap common Hydra entry points so you can version benchmark runs alongside
+code:
+
+- `scripts/run_search_eval.py` delegates to `img_search.search.evaluate.app` and loads the
+  default search-eval config tree before printing a Rich summary table.【F:scripts/run_search_eval.py†L1-L7】【F:img_search/search/evaluate.py†L585-L620】
+- `scripts/upload_to_hub.py` pushes paired `images`/`texts` configurations to the Hugging
+  Face Hub once embeddings are generated locally.【F:scripts/upload_to_hub.py†L1-L68】
+
+Use `uv run python scripts/run_search_eval.py evaluation.output_path=...` to capture the
+benchmark CSV in addition to the terminal output.【F:img_search/search/evaluate.py†L585-L620】
 
 ## Project Layout
 
@@ -125,27 +173,41 @@ publishing to the Hugging Face Hub.【F:img_search/pipeline/embed.py†L167-L208
 - `img_search/search/` – ANN index builders plus the evaluation CLI.
 - `img_search/frontend/` – Streamlit demo for Flickr30k retrieval.
 - `img_search/utils/` – Logging utilities and shared helpers.
-- `docs/` – Extended guides, including ANN benchmarking and Streamlit usage.
+- `docs/` – Guides, tutorials, and reference material covering pipelines, evaluation, and demos.
 - `scripts/` – CLI utilities for dataset preparation, benchmarking, and Hub uploads.
 - `tests/` – Pytest suites covering datasets, encoders, and ANN helpers.
 
 ## Documentation
 
-Additional guides live under `docs/`:
+The `docs/` directory now groups material into guides, tutorials, and reference pages:
 
-- [Development workflow](docs/dev.md) – Environment setup, linting, and test commands.
-- [INQUIRE SigLIP pipeline](docs/inquire_siglip.md) – Instructions for producing and
-  evaluating SigLIP embeddings for INQUIRE.
-- [ANN benchmark harness](docs/faiss_benchmark.md) – Detailed walkthrough of the
-  evaluation CLI.
-- [Flickr30k Streamlit demo](docs/flickr30k_demo.md) – UI controls, environment
-  overrides, and troubleshooting tips.
-- [Project overview](docs/index.md) – Component breakdown and end-to-end recipes.
+- [Documentation overview](docs/index.md) – Landing page with a quick-start checklist and
+  links to every article.
+- **Guides** – Day-to-day workflows.
+  - [Development workflow](docs/guides/development_workflow.md) – Environment setup,
+    linting, and multi-GPU tips.
+  - [ANN evaluation playbook](docs/guides/ann_evaluation.md) – Detailed walkthrough of the
+    benchmarking CLI.
+- **Tutorials** – Reproducible experiments.
+  - [Flickr30k Streamlit demo](docs/tutorials/flickr30k_streamlit.md) – UI controls,
+    environment overrides, and troubleshooting tips.
+  - [INQUIRE SigLIP pipeline](docs/tutorials/inquire_siglip_pipeline.md) – Instructions for
+    producing and evaluating SigLIP embeddings for INQUIRE.
+- **Reference** – Architecture and API deep dives.
+  - [System architecture overview](docs/reference/architecture.md) – Component breakdown and
+    dependency map.
+  - [Embedding pipelines and dataset adapters](docs/reference/pipelines.md) – Hydra config
+    structure plus image/text pipeline lifecycles.
+  - [ANN harness and embedding datasets](docs/reference/evaluation.md) – Dataset specs and
+    recall evaluation details.
+  - [Publishing embeddings to the Hub](docs/reference/publishing.md) – Steps for pushing
+    Parquet artifacts to Hugging Face.
 
 ## Development
 
 Run Ruff, pytest, and other pre-commit checks before committing changes. The helper guide
-in `docs/dev.md` captures the recommended workflow, including multi-GPU Accelerate tips.
+in `docs/guides/development_workflow.md` captures the recommended workflow, including
+multi-GPU Accelerate tips.
 
 ```bash
 uv run pre-commit run --all-files
