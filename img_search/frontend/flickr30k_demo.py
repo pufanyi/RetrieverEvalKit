@@ -119,9 +119,22 @@ def _inject_app_styles() -> None:
 
         .stApp {
             background:
-                radial-gradient(120% 120% at 0% 0%, rgba(99, 102, 241, 0.18), transparent 60%),
-                radial-gradient(140% 140% at 100% 0%, rgba(56, 189, 248, 0.12), transparent 55%),
-                linear-gradient(135deg, #0b1220, #111b33 55%, #0b1220 90%);
+                radial-gradient(
+                    120% 120% at 0% 0%,
+                    rgba(99, 102, 241, 0.18),
+                    transparent 60%
+                ),
+                radial-gradient(
+                    140% 140% at 100% 0%,
+                    rgba(56, 189, 248, 0.12),
+                    transparent 55%
+                ),
+                linear-gradient(
+                    135deg,
+                    #0b1220,
+                    #111b33 55%,
+                    #0b1220 90%
+                );
             color: var(--app-text-strong);
         }
 
@@ -200,7 +213,11 @@ def _inject_app_styles() -> None:
             margin-top: 1.2rem;
             padding: 1.5rem;
             border-radius: 20px;
-            background: linear-gradient(135deg, rgba(99, 102, 241, 0.22), rgba(59, 130, 246, 0.2));
+            background: linear-gradient(
+                135deg,
+                rgba(99, 102, 241, 0.22),
+                rgba(59, 130, 246, 0.2)
+            );
             border: 1px solid rgba(129, 140, 248, 0.38);
             display: flex;
             flex-direction: column;
@@ -245,7 +262,10 @@ def _inject_app_styles() -> None:
             border: 1px solid rgba(99, 102, 241, 0.25);
             overflow: hidden;
             box-shadow: 0 18px 30px rgba(15, 23, 42, 0.35);
-            transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+            transition:
+                transform 0.2s ease,
+                border-color 0.2s ease,
+                box-shadow 0.2s ease;
             display: flex;
             flex-direction: column;
         }
@@ -365,7 +385,11 @@ def _inject_app_styles() -> None:
         }
 
         .loading-hero {
-            background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(14, 165, 233, 0.2));
+            background: linear-gradient(
+                135deg,
+                rgba(99, 102, 241, 0.25),
+                rgba(14, 165, 233, 0.2)
+            );
             border-radius: 24px;
             padding: 2.5rem;
             border: 1px solid rgba(148, 163, 184, 0.35);
@@ -646,7 +670,9 @@ class Flickr30kSearchEngine:
                     dataset_len = len(image_dataset)
                     limit = min(self.settings.limit, dataset_len)
                     logger.info(
-                        f"Applying limit: loading only first {limit} of {dataset_len} images"
+                        "Applying limit: loading only first %s of %s images",
+                        limit,
+                        dataset_len,
                     )
                     image_dataset = image_dataset.select(range(limit))
 
@@ -696,7 +722,9 @@ class Flickr30kSearchEngine:
                     caption_limit = self.settings.limit * 5
                     caption_limit = min(caption_limit, dataset_len)
                     logger.info(
-                        f"Applying caption limit: loading only first {caption_limit} of {dataset_len} captions"
+                        "Applying caption limit: loading only first %s of %s captions",
+                        caption_limit,
+                        dataset_len,
                     )
                     caption_dataset = caption_dataset.select(range(caption_limit))
 
@@ -732,7 +760,9 @@ class Flickr30kSearchEngine:
                     caption_limit = self.settings.limit * 5
                     caption_limit = min(caption_limit, dataset_len)
                     logger.info(
-                        f"Applying caption metadata limit: {caption_limit} of {dataset_len}"
+                        "Applying caption metadata limit: %s of %s",
+                        caption_limit,
+                        dataset_len,
                     )
                     caption_dataset = caption_dataset.select(range(caption_limit))
 
@@ -1296,7 +1326,10 @@ def _render_results(
         captions = summary.get("captions") or []
         if captions:
             preview_caption = captions[0].get("caption") or "(No text)"
-            preview = f'<span class="result-summary__chip">Primary caption: {html.escape(preview_caption)}</span>'
+            preview = (
+                '<span class="result-summary__chip">Primary caption: '
+                f"{html.escape(preview_caption)}</span>"
+            )
         details_html = (
             f'<div class="result-summary__meta">{preview}</div>' if preview else ""
         )
@@ -1353,13 +1386,17 @@ def _render_results(
                     primary_caption = item.get("caption") or "No description"
 
                     # Header with rank badge
-                    st.markdown(
-                        f'<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">'
+                    header_markup = (
+                        '<div style="display: flex; justify-content: space-between; '
+                        'align-items: center; margin-bottom: 0.5rem;">'
                         f"<strong>Image {identifier}</strong>"
-                        f'<span style="background: var(--app-accent, #6366f1); color: white; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.875rem;">#{rank}</span>'
-                        f"</div>",
-                        unsafe_allow_html=True,
+                        '<span style="background: var(--app-accent, #6366f1); '
+                        "color: white; padding: 0.25rem 0.5rem; border-radius: "
+                        '0.25rem; font-size: 0.875rem;">'
+                        f"#{rank}</span>"
+                        "</div>"
                     )
+                    st.markdown(header_markup, unsafe_allow_html=True)
 
                     # Display image - force full width
                     image_url = item.get("image_url")
@@ -1393,9 +1430,12 @@ def _render_results(
 
                     # Distance and metric info
                     st.markdown(
-                        f'<div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.5rem;">'
-                        f"Distance: {distance_value:.4f} · Metric: {metric_value}"
-                        f"</div>",
+                        (
+                            '<div style="font-size: 0.75rem; color: #94a3b8; '
+                            'margin-top: 0.5rem;">'
+                            f"Distance: {distance_value:.4f} · Metric: {metric_value}"
+                            "</div>"
+                        ),
                         unsafe_allow_html=True,
                     )
 
@@ -1463,7 +1503,8 @@ def main() -> None:
                 </div>
                 <h2 class="loading-hero__title">Booting up the Flickr30k demo</h2>
                 <p class="loading-hero__subtitle">
-                    We are caching image embeddings and priming retrieval backends so your first search feels instant.
+                    We are caching image embeddings and priming retrieval backends
+                    so your first search feels instant.
                 </p>
                 <div class="loading-hero__meta">
                     {chips_markup}

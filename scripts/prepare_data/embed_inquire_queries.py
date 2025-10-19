@@ -15,6 +15,8 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import torch
 
+from img_search.embedding import SiglipEncoder
+
 DEFAULT_ANNOTATIONS = (
     "https://raw.githubusercontent.com/inquire-benchmark/INQUIRE/"
     "refs/heads/main/data/inquire/inquire_annotations.csv"
