@@ -5,9 +5,9 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 from collections.abc import Iterable
 from pathlib import Path
-import sys
 
 import numpy as np
 import pandas as pd
@@ -333,7 +333,9 @@ def _write_shards(
 
 def main() -> None:
     args = parse_args()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
+    )
 
     annotations = _load_annotations(args.annotations)
     split_sources: dict[str, str] = {}
@@ -368,8 +370,10 @@ def main() -> None:
                 )
                 continue
             queries = queries.head(args.limit)
-        queries["image_id"] = queries["query_id"].map(annotations).apply(
-            lambda value: value if isinstance(value, list) else []
+        queries["image_id"] = (
+            queries["query_id"]
+            .map(annotations)
+            .apply(lambda value: value if isinstance(value, list) else [])
         )
         texts = queries["query_text"].tolist()
         logging.info("Encoding %d queries for split '%s'...", len(texts), split)

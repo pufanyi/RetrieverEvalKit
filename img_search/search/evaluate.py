@@ -524,7 +524,9 @@ def _write_excel(
 ) -> None:
     try:
         import pandas as pd
-    except ImportError as exc:  # pragma: no cover - pandas is a hard dependency in practice
+    except (
+        ImportError
+    ) as exc:  # pragma: no cover - pandas is a hard dependency in practice
         logger.warning("Skipping Excel export; pandas is unavailable: {}", exc)
         return
 
