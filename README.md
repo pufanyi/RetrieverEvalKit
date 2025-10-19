@@ -24,19 +24,19 @@ environments, so production runs match the local developer workflow.
 - **Hydra-configurable embedding pipelines** – The image and caption pipelines in
   `img_search.pipeline.embed` and `img_search.pipeline.embed_text` coordinate dataset
   downloads, encoder initialisation, and synchronised batch processing across
-  multi-GPU launches with [Accelerate](https://huggingface.co/docs/accelerate).【F:img_search/pipeline/embed.py†L20-L146】【F:img_search/pipeline/embed_text.py†L20-L168】
+  multi-GPU launches with [Accelerate](https://huggingface.co/docs/accelerate).
 - **Pluggable dataset adapters** – Built-in loaders cover INQUIRE images and Flickr30k
-  captions, with extensible base classes for additional image or text datasets.【F:img_search/data/dataset.py†L1-L63】【F:img_search/data/inquire.py†L10-L97】【F:img_search/data/captions.py†L8-L78】
+  captions, with extensible base classes for additional image or text datasets.
 - **Encoder registry** – Switch between SigLIP, SigLIP2, and Jina CLIP families (plus
   vLLM-backed variants) by editing `img_search/config/models/*.yaml` or passing Hydra
-  overrides at runtime.【F:img_search/embedding/__init__.py†L1-L44】【F:img_search/config/models/jina_v4.yaml†L1-L6】
+  overrides at runtime.
 - **Search benchmarking harness** – `img_search.search.evaluate` loads embedding
   datasets, spins up FAISS/ScaNN/HNSWlib indices, and reports timing plus recall
-  metrics with optional GPU acceleration.【F:img_search/search/evaluate.py†L1-L205】
+  metrics with optional GPU acceleration.
 - **Streamlit front-end** – The Flickr30k demo wraps the ANN backends behind a browser
-  UI and serves local thumbnails when available.【F:img_search/frontend/flickr30k_demo.py†L1-L156】
+  UI and serves local thumbnails when available.
 - **Automation scripts** – Helper CLIs prepare datasets (`scripts/prepare_data/`), run
-  ANN evaluations, and push embeddings to the Hugging Face Hub.【F:scripts/run_search_eval.py†L1-L60】【F:scripts/upload_to_hub.py†L1-L68】
+  ANN evaluations, and push embeddings to the Hugging Face Hub.
 
 ## Installation
 
@@ -48,7 +48,7 @@ uv sync --dev
 ```
 
 The command installs runtime dependencies, Streamlit, optional ANN libraries declared in
-`pyproject.toml`, and development tooling such as Ruff and pytest.【F:pyproject.toml†L1-L136】
+`pyproject.toml`, and development tooling such as Ruff and pytest.
 
 ## Core workflows
 
@@ -65,10 +65,10 @@ uv run python -m img_search.pipeline.embed
 Key Hydra groups include:
 
 - `models` – selects encoders like `siglip`, `siglip2`, `jina_v4`, or their vLLM
-  variants.【F:img_search/embedding/__init__.py†L27-L44】
+  variants.
 - `datasets` – describes image datasets such as `inquire` or `flickr30k`, including
-  split names and identifier columns.【F:img_search/data/__init__.py†L1-L48】
-- `tasks` – controls batching behaviour (e.g. `batch_size`).【F:img_search/pipeline/embed.py†L110-L142】
+  split names and identifier columns.
+- `tasks` – controls batching behaviour (e.g. `batch_size`).
 
 To accelerate multi-GPU jobs, launch via Accelerate and enable the integration for the
 Jina encoder:
@@ -82,13 +82,13 @@ uv run accelerate launch --num_processes 8 --mixed_precision bf16 \
 ```
 
 The pipeline coordinates downloads on the main process and synchronises workers before
-embedding batches, retrying transient failures automatically.【F:img_search/pipeline/embed.py†L20-L142】
+embedding batches, retrying transient failures automatically.
 
 ### Embed caption corpora
 
 Use `img_search.pipeline.embed_text` to transform caption JSONL datasets into Parquet
 embedding tables. Caption records carry both caption/image identifiers and the raw text
-for downstream analysis.【F:img_search/pipeline/embed_text.py†L95-L168】【F:img_search/data/captions.py†L8-L78】
+for downstream analysis.
 
 ```bash
 uv run python -m img_search.pipeline.embed_text \
@@ -108,20 +108,20 @@ uv run python -m img_search.search.evaluate \
 ```
 
 Configuration files live under `img_search/config/search_eval/` and describe dataset
-locations, ANN parameters, and recall levels.【F:img_search/config/search_eval/eval.yaml†L1-L5】【F:img_search/search/evaluate.py†L64-L142】
+locations, ANN parameters, and recall levels.
 
 ### Explore Flickr30k in the browser
 
 Launch the Streamlit demo to test text and caption queries against Flickr30k embeddings.
 It automatically loads the default Hugging Face dataset, builds ANN indices, and renders
-local thumbnails when `FLICKR30K_IMAGE_ROOT` points to the Flickr30k image directory.【F:img_search/frontend/flickr30k_demo.py†L1-L156】
+local thumbnails when `FLICKR30K_IMAGE_ROOT` points to the Flickr30k image directory.
 
 ```bash
 uv run streamlit run img_search/frontend/flickr30k_demo.py
 ```
 
 Set `FLICKR30K_CAPTION_CONFIG`, `FLICKR30K_IMAGE_ROOT`, or `FLICKR30K_IMAGE_PATTERN` to
-customise the data sources.【F:img_search/frontend/flickr30k_demo.py†L53-L96】
+customise the data sources.
 
 ## Hydra configuration primer
 
@@ -132,12 +132,12 @@ task, logging, and output groups so you can swap components with one-line overri
 - **Models** live in `img_search/config/models/*.yaml` and map directly to encoder
   factories registered in `img_search.embedding`. Each config is forwarded to
   `get_encoder`, which instantiates classes such as `JinaV4Encoder`, `SiglipEncoder`, or
-  their vLLM-backed variants.【F:img_search/embedding/__init__.py†L1-L44】
+  their vLLM-backed variants.
 - **Datasets** are described under `img_search/config/datasets/*.yaml` and resolve to
   subclasses of `ImageDataset` or `TextDataset` through the dataset registries, keeping
-  loader logic centralised in `img_search.data`.【F:img_search/data/__init__.py†L1-L48】【F:img_search/data/dataset.py†L1-L63】
+  loader logic centralised in `img_search.data`.
 - **Tasks** control batching, device placement, and other runtime knobs consumed inside
-  the embedding pipelines to size progress bars and dataloaders.【F:img_search/pipeline/embed.py†L103-L208】
+  the embedding pipelines to size progress bars and dataloaders.
 
 Override any group inline—`models=jina_v4 datasets=inquire tasks.batch_size=512`—to reuse
 the same scripts across experiments without editing YAML files.
@@ -145,12 +145,12 @@ the same scripts across experiments without editing YAML files.
 ## Embedding datasets and artifacts
 
 Both embedding pipelines emit Apache Parquet files containing Arrow tables with stable
-identifiers, encoder/dataset metadata, and dense embedding vectors.【F:img_search/pipeline/embed.py†L167-L208】【F:img_search/pipeline/embed_text.py†L170-L227】 The ANN
+identifiers, encoder/dataset metadata, and dense embedding vectors. The ANN
 benchmark and Streamlit demo load these corpora through
 `EmbeddingDatasetSpec`, which handles Hugging Face datasets, `load_from_disk` directories,
-streaming iteration, and optional NumPy memmaps for out-of-memory workloads.【F:img_search/data/embeddings.py†L1-L200】 Use
+streaming iteration, and optional NumPy memmaps for out-of-memory workloads. Use
 `read_batch_size` and `memmap_path` in the spec to bound memory usage during ANN
-benchmarks.【F:img_search/data/embeddings.py†L115-L198】
+benchmarks.
 
 ## Automation scripts
 
@@ -158,12 +158,12 @@ Helper CLIs wrap common Hydra entry points so you can version benchmark runs alo
 code:
 
 - `scripts/run_search_eval.py` delegates to `img_search.search.evaluate.app` and loads the
-  default search-eval config tree before printing a Rich summary table.【F:scripts/run_search_eval.py†L1-L7】【F:img_search/search/evaluate.py†L585-L620】
+  default search-eval config tree before printing a Rich summary table.
 - `scripts/upload_to_hub.py` pushes paired `images`/`texts` configurations to the Hugging
-  Face Hub once embeddings are generated locally.【F:scripts/upload_to_hub.py†L1-L68】
+  Face Hub once embeddings are generated locally.
 
 Use `uv run python scripts/run_search_eval.py evaluation.output_path=...` to capture the
-benchmark CSV in addition to the terminal output.【F:img_search/search/evaluate.py†L585-L620】
+benchmark CSV in addition to the terminal output.
 
 ## Project Layout
 
@@ -218,9 +218,4 @@ uv run pytest -n auto
 
 `python scripts/upload_to_hub.py` uploads image and caption Parquet outputs to a Hugging
 Face dataset repository, creating the target repo if necessary. Override the default
-paths and repo ID with CLI flags as needed.【F:scripts/upload_to_hub.py†L1-L68】
-
----
-
-RetrieverEvalKit is released under the Apache 2.0 License. Contributions are welcome—see
-existing docs for coding standards and testing expectations.【F:LICENSE†L1-L201】
+paths and repo ID with CLI flags as needed.

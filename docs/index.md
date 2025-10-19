@@ -10,11 +10,11 @@ while keeping the README focused on high-level positioning.
 Follow the quick-start path when you first clone the repository:
 
 1. **Install dependencies** with `uv sync --dev` to mirror the locked runtime and
-development toolchain.【F:pyproject.toml†L1-L136】
+development toolchain.
 2. **Generate embeddings** by running `uv run python -m img_search.pipeline.embed`
-and selecting encoders/datasets via Hydra overrides.【F:img_search/pipeline/embed.py†L20-L208】
+and selecting encoders/datasets via Hydra overrides.
 3. **Evaluate retrieval** using `uv run python -m img_search.search.evaluate`
-against the produced Parquet artifacts.【F:img_search/search/evaluate.py†L64-L205】
+against the produced Parquet artifacts.
 4. **Explore results** either by launching the Streamlit UI or exporting
 benchmarks for sharing.
 

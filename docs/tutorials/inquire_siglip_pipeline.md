@@ -111,16 +111,16 @@ uv run python -m img_search.search.evaluate \
 The SigLIP corpora ship with dedicated Hydra descriptors located under
 `img_search/config/search_eval`. The `image_dataset/inquire_siglip.yaml` and
 `query_dataset/inquire_siglip.yaml` files target the hosted Hub dataset and define the
-identifier, embedding, and relevance columns consumed by the ANN harness.【F:img_search/config/search_eval/image_dataset/inquire_siglip.yaml†L1-L10】【F:img_search/config/search_eval/query_dataset/inquire_siglip.yaml†L1-L10】
+identifier, embedding, and relevance columns consumed by the ANN harness.
 
 When running local experiments, clone those YAML files and adjust `load_from_disk` or
 `data_files` to point at your Parquet shards. Because the configs map directly onto the
 `EmbeddingDatasetSpec` dataclass, you can also enable memmapped extraction with
-`memmap_path=outputs/inquire/memmap` to keep RAM usage bounded during evaluation runs.【F:img_search/data/embeddings.py†L15-L198】
+`memmap_path=outputs/inquire/memmap` to keep RAM usage bounded during evaluation runs.
 
 The query config defaults to the `test` split. If you want to evaluate validation queries
 instead, pass `query_dataset.split=val` on the command line—the CLI reuses the same
-configuration structure without any code changes.【F:img_search/search/evaluate.py†L90-L191】
+configuration structure without any code changes.
 
 ## Spot-checking the dataset
 
@@ -128,6 +128,6 @@ Before pushing embeddings to the Hub, load them back through
 `EmbeddingDatasetSpec` (or `datasets.load_dataset("parquet")`) to verify metadata fields and
 vector dimensions. The `scripts/run_search_eval.py` command is a convenient smoke test:
 it will parse the Hydra configs, materialise vectors, and run at least one FAISS
-configuration—failing fast if IDs or embeddings are missing.【F:scripts/run_search_eval.py†L1-L7】【F:img_search/search/evaluate.py†L123-L309】 Use
+configuration—failing fast if IDs or embeddings are missing. Use
 `evaluation.methods=[]` to perform only the brute-force baseline while you iterate on the
 dataset layout.

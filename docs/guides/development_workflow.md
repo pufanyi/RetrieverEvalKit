@@ -64,11 +64,11 @@ The repository ships a sizeable pytest suite split across dedicated subpackages.
 tests most relevant to your change instead of the entire matrix when iterating quickly:
 
 - Encoders: `uv run pytest tests/embedding -k jina` validates the Jina integration and
-  catches regressions around Accelerate usage.【F:tests/embedding/test_jina.py†L1-L88】
+  catches regressions around Accelerate usage.
 - Dataset loaders: `uv run pytest tests/data` exercises the dataset registries,
-  `InquireDataset`, and caption parsing helpers.【F:tests/data/test_dataset.py†L1-L118】【F:tests/data/test_inquire.py†L1-L101】
+  `InquireDataset`, and caption parsing helpers.
 - Search harness: `uv run pytest tests/search` spins up FAISS/ScaNN/HNSWlib indexes using
-  synthetic embeddings to ensure the CLI stays stable.【F:tests/search/test_evaluate.py†L1-L118】
+  synthetic embeddings to ensure the CLI stays stable.
 
 Adopt the full `uv run pytest -n auto` command before opening a PR to verify the parallel
 suite passes on a clean environment.
@@ -77,18 +77,18 @@ suite passes on a clean environment.
 
 All entry points are wired through Hydra, so configuration edits belong in
 `img_search/config`. The top-level `embed_config.yaml` composes models, datasets, and task
-settings that the pipelines consume at runtime.【F:img_search/config/embed_config.yaml†L1-L37】 Use
+settings that the pipelines consume at runtime. Use
 `uv run python -m img_search.pipeline.embed models=jina_v4 datasets=inquire` to confirm
 your YAML changes resolve correctly without needing to commit them.
 
 For logging tweaks, update `img_search/config/logging/info.yaml` and rely on
-`setup_logger` to propagate the settings across Accelerate workers.【F:img_search/config/logging/info.yaml†L1-L28】【F:img_search/utils/logging.py†L1-L118】
+`setup_logger` to propagate the settings across Accelerate workers.
 
 ## Dataset caches and retries
 
 Large dataset downloads happen once on the main Accelerate rank, then subsequent workers
 reuse the cached artefacts. The image and text pipelines coordinate this behaviour via
 `safe_build_dataset`, which retries transient failures and blocks until the resource is
-ready before other processes continue.【F:img_search/pipeline/embed.py†L56-L104】【F:img_search/pipeline/embed_text.py†L99-L157】 Keep
+ready before other processes continue. Keep
 datasets on a fast local disk (or pre-download them) to avoid repeated cache misses during
 development.

@@ -21,13 +21,13 @@ multi-process embedding runs. Hydra drives every entrypoint, so add
 
 | Path | Purpose |
 | --- | --- |
-| `img_search/data/` | Dataset abstractions for images, captions, and on-disk embedding corpora.【F:img_search/data/dataset.py†L1-L63】【F:img_search/data/embeddings.py†L1-L120】 |
-| `img_search/embedding/` | Encoder implementations (SigLIP, SigLIP2, Jina CLIP, vLLM-backed variants) and the registry helper that instantiates them from Hydra configs.【F:img_search/embedding/__init__.py†L1-L44】 |
-| `img_search/pipeline/` | Hydra entrypoints for image and caption embedding jobs with Accelerate-aware retry logic.【F:img_search/pipeline/embed.py†L20-L208】【F:img_search/pipeline/embed_text.py†L20-L227】 |
-| `img_search/search/` | ANN benchmarking utilities plus backend-specific wrappers for FAISS, ScaNN, and HNSWlib.【F:img_search/search/evaluate.py†L1-L205】 |
-| `img_search/frontend/` | Streamlit application for browsing Flickr30k retrieval results and testing live queries.【F:img_search/frontend/flickr30k_demo.py†L1-L156】 |
-| `img_search/config/` | Hydra configuration groups for models, datasets, tasks, logging, and search evaluation presets.【F:img_search/config/embed_config.yaml†L1-L37】【F:img_search/config/models/jina_v4.yaml†L1-L6】 |
-| `scripts/` | CLI helpers for benchmarking and publishing embedding artifacts to the Hugging Face Hub.【F:scripts/run_search_eval.py†L1-L60】【F:scripts/upload_to_hub.py†L1-L68】 |
+| `img_search/data/` | Dataset abstractions for images, captions, and on-disk embedding corpora. |
+| `img_search/embedding/` | Encoder implementations (SigLIP, SigLIP2, Jina CLIP, vLLM-backed variants) and the registry helper that instantiates them from Hydra configs. |
+| `img_search/pipeline/` | Hydra entrypoints for image and caption embedding jobs with Accelerate-aware retry logic. |
+| `img_search/search/` | ANN benchmarking utilities plus backend-specific wrappers for FAISS, ScaNN, and HNSWlib. |
+| `img_search/frontend/` | Streamlit application for browsing Flickr30k retrieval results and testing live queries. |
+| `img_search/config/` | Hydra configuration groups for models, datasets, tasks, logging, and search evaluation presets. |
+| `scripts/` | CLI helpers for benchmarking and publishing embedding artifacts to the Hugging Face Hub. |
 
 ## Core components
 

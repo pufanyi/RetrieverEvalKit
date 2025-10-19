@@ -2,7 +2,7 @@
 
 Once image and caption vectors are generated, `scripts/upload_to_hub.py` pushes
 the Parquet outputs to a Hugging Face dataset repository. The script creates the
-target repo if needed and uploads `images` and `texts` configs in one call.【F:scripts/upload_to_hub.py†L1-L68】
+target repo if needed and uploads `images` and `texts` configs in one call.
 
 Follow the checklist below when preparing a release:
 
