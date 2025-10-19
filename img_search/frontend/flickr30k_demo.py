@@ -640,14 +640,16 @@ class Flickr30kSearchEngine:
                     self.settings.image_dataset,
                 )
                 image_dataset = load_embedding_dataset(self.settings.image_dataset)
-                
+
                 # Apply limit BEFORE extracting embeddings (for faster debugging)
                 if self.settings.limit is not None and self.settings.limit > 0:
                     dataset_len = len(image_dataset)
                     limit = min(self.settings.limit, dataset_len)
-                    logger.info(f"Applying limit: loading only first {limit} of {dataset_len} images")
+                    logger.info(
+                        f"Applying limit: loading only first {limit} of {dataset_len} images"
+                    )
                     image_dataset = image_dataset.select(range(limit))
-                
+
                 image_ids, image_vectors = extract_embeddings(
                     image_dataset,
                     id_column=self.settings.image_dataset.id_column,
@@ -655,7 +657,7 @@ class Flickr30kSearchEngine:
                 )
                 if image_vectors.ndim != 2:
                     raise RuntimeError("Image embedding matrix must be 2-dimensional")
-                
+
                 self._image_ids = [str(identifier) for identifier in image_ids]
                 self._image_vectors = np.asarray(image_vectors, dtype="float32")
                 self._image_lookup = {
@@ -685,7 +687,7 @@ class Flickr30kSearchEngine:
                     self.settings.caption_dataset,
                 )
                 caption_dataset = load_embedding_dataset(self.settings.caption_dataset)
-                
+
                 # Apply limit BEFORE extracting embeddings (for faster debugging)
                 if self.settings.limit is not None and self.settings.limit > 0:
                     dataset_len = len(caption_dataset)
@@ -693,9 +695,11 @@ class Flickr30kSearchEngine:
                     # Flickr30k has ~5 captions per image, so multiply limit by 5
                     caption_limit = self.settings.limit * 5
                     caption_limit = min(caption_limit, dataset_len)
-                    logger.info(f"Applying caption limit: loading only first {caption_limit} of {dataset_len} captions")
+                    logger.info(
+                        f"Applying caption limit: loading only first {caption_limit} of {dataset_len} captions"
+                    )
                     caption_dataset = caption_dataset.select(range(caption_limit))
-                
+
                 caption_ids, caption_vectors = extract_embeddings(
                     caption_dataset,
                     id_column=self.settings.caption_dataset.id_column,
@@ -721,13 +725,15 @@ class Flickr30kSearchEngine:
                 )
             elif metadata_needed:
                 caption_dataset = load_embedding_dataset(self.settings.caption_dataset)
-                
+
                 # Apply limit for metadata too (for faster debugging)
                 if self.settings.limit is not None and self.settings.limit > 0:
                     dataset_len = len(caption_dataset)
                     caption_limit = self.settings.limit * 5
                     caption_limit = min(caption_limit, dataset_len)
-                    logger.info(f"Applying caption metadata limit: {caption_limit} of {dataset_len}")
+                    logger.info(
+                        f"Applying caption metadata limit: {caption_limit} of {dataset_len}"
+                    )
                     caption_dataset = caption_dataset.select(range(caption_limit))
 
             if metadata_needed:
@@ -1081,7 +1087,7 @@ class Flickr30kSearchEngine:
 def _parse_cli_args() -> argparse.Namespace:
     """
     Parse command line arguments for the demo.
-    
+
     Note: When running with streamlit, use: streamlit run script.py -- --limit 5
     Or set via environment variable: FLICKR30K_LIMIT=5 streamlit run script.py
     """
@@ -1094,7 +1100,7 @@ def _parse_cli_args() -> argparse.Namespace:
     )
     # Parse only known args to avoid conflicts with streamlit's own args
     args, _ = parser.parse_known_args()
-    
+
     # Also check environment variable as an alternative
     if args.limit is None:
         env_limit = os.getenv("FLICKR30K_LIMIT")
@@ -1103,7 +1109,7 @@ def _parse_cli_args() -> argparse.Namespace:
                 args.limit = int(env_limit)
             except ValueError:
                 logger.warning(f"Invalid FLICKR30K_LIMIT value: {env_limit}")
-    
+
     return args
 
 
@@ -1172,9 +1178,7 @@ def _render_sidebar(
             st.caption("Caption search currently unavailable.")
         loaded = status.get("methods", [])
         if loaded:
-            labels = ", ".join(
-                item.get("label", item.get("id", "")) for item in loaded
-            )
+            labels = ", ".join(item.get("label", item.get("id", "")) for item in loaded)
             st.caption(f"Loaded backends: {labels}")
         if status.get("method_errors"):
             for key, message in status["method_errors"].items():
@@ -1323,20 +1327,20 @@ def _render_results(
         return
 
     score_label = "Similarity" if backend.supports_similarity else "Score"
-    
+
     # Render results using native Streamlit components in a grid layout
     # Use columns to create a responsive grid (3 cards per row)
     CARDS_PER_ROW = 3
     num_rows = (len(results) + CARDS_PER_ROW - 1) // CARDS_PER_ROW
-    
+
     for row_idx in range(num_rows):
         start_idx = row_idx * CARDS_PER_ROW
         end_idx = min(start_idx + CARDS_PER_ROW, len(results))
         row_results = results[start_idx:end_idx]
-        
+
         # Create columns for this row
         cols = st.columns(CARDS_PER_ROW)
-        
+
         for col_idx, item in enumerate(row_results):
             with cols[col_idx]:
                 # Create a container for each card with border
@@ -1347,20 +1351,20 @@ def _render_results(
                     distance_value = float(item.get("distance", 0.0))
                     metric_value = str(item.get("metric", "")).upper()
                     primary_caption = item.get("caption") or "No description"
-                    
+
                     # Header with rank badge
                     st.markdown(
                         f'<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">'
-                        f'<strong>Image {identifier}</strong>'
+                        f"<strong>Image {identifier}</strong>"
                         f'<span style="background: var(--app-accent, #6366f1); color: white; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.875rem;">#{rank}</span>'
-                        f'</div>',
-                        unsafe_allow_html=True
+                        f"</div>",
+                        unsafe_allow_html=True,
                     )
-                    
+
                     # Display image - force full width
                     image_url = item.get("image_url")
                     image_path = item.get("image_path")
-                    
+
                     # Determine image source
                     image_to_display = None
                     if image_url:
@@ -1369,7 +1373,7 @@ def _render_results(
                         img_file = Path(image_path)
                         if img_file.exists():
                             image_to_display = str(img_file)
-                    
+
                     if image_to_display:
                         # Display image with full container width
                         try:
@@ -1380,21 +1384,21 @@ def _render_results(
                             st.error(f"Failed to load image: {e}")
                     else:
                         st.warning("⚠️ Image not available")
-                    
+
                     # Score
                     st.metric(label=score_label, value=f"{score_value:.4f}")
-                    
+
                     # Caption
                     st.caption(primary_caption)
-                    
+
                     # Distance and metric info
                     st.markdown(
                         f'<div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.5rem;">'
-                        f'Distance: {distance_value:.4f} · Metric: {metric_value}'
-                        f'</div>',
-                        unsafe_allow_html=True
+                        f"Distance: {distance_value:.4f} · Metric: {metric_value}"
+                        f"</div>",
+                        unsafe_allow_html=True,
                     )
-                    
+
                     # Extra captions in expander
                     extra_captions = item.get("captions", [])[1:]
                     if extra_captions:
@@ -1439,9 +1443,7 @@ def main() -> None:
 
     if not engine.is_ready:
         dataset_spec = engine.settings.image_dataset
-        dataset_name = (
-            dataset_spec.dataset_name if dataset_spec else "Unknown dataset"
-        )
+        dataset_name = dataset_spec.dataset_name if dataset_spec else "Unknown dataset"
         chips = [
             f"Dataset · {dataset_name}",
             f"Backends · {len(_DEFAULT_METHODS)} available",
@@ -1561,9 +1563,7 @@ def main() -> None:
 
         elapsed = time.perf_counter() - start_time
         message_text = final_message or last_message or "Working..."
-        progress_bar.progress(
-            last_fraction, text=f"{message_text} ({elapsed:.2f}s)"
-        )
+        progress_bar.progress(last_fraction, text=f"{message_text} ({elapsed:.2f}s)")
         status_placeholder.markdown(
             (
                 '<div class="loading-status">'
@@ -1712,9 +1712,7 @@ def main() -> None:
     timings_store = st.session_state.get("backend_timings", {}).get(method_id)
     if timings_store:
         with st.expander("Load timings", expanded=False):
-            timing_rows = {
-                key: f"{value:.2f}s" for key, value in timings_store.items()
-            }
+            timing_rows = {key: f"{value:.2f}s" for key, value in timings_store.items()}
             st.write(timing_rows)
 
     if not method_ready:
