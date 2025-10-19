@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import asyncio
 import base64
 import html
@@ -469,6 +470,7 @@ class DemoSettings:
     image_pattern: str = "{id}.jpg"
     default_top_k: int = 9
     max_top_k: int = 50
+    limit: int | None = None  # Limit number of images to load for faster debugging
 
     def __post_init__(self) -> None:
         if self.image_dataset is None:
@@ -638,6 +640,14 @@ class Flickr30kSearchEngine:
                     self.settings.image_dataset,
                 )
                 image_dataset = load_embedding_dataset(self.settings.image_dataset)
+                
+                # Apply limit BEFORE extracting embeddings (for faster debugging)
+                if self.settings.limit is not None and self.settings.limit > 0:
+                    dataset_len = len(image_dataset)
+                    limit = min(self.settings.limit, dataset_len)
+                    logger.info(f"Applying limit: loading only first {limit} of {dataset_len} images")
+                    image_dataset = image_dataset.select(range(limit))
+                
                 image_ids, image_vectors = extract_embeddings(
                     image_dataset,
                     id_column=self.settings.image_dataset.id_column,
@@ -645,6 +655,7 @@ class Flickr30kSearchEngine:
                 )
                 if image_vectors.ndim != 2:
                     raise RuntimeError("Image embedding matrix must be 2-dimensional")
+                
                 self._image_ids = [str(identifier) for identifier in image_ids]
                 self._image_vectors = np.asarray(image_vectors, dtype="float32")
                 self._image_lookup = {
@@ -674,6 +685,17 @@ class Flickr30kSearchEngine:
                     self.settings.caption_dataset,
                 )
                 caption_dataset = load_embedding_dataset(self.settings.caption_dataset)
+                
+                # Apply limit BEFORE extracting embeddings (for faster debugging)
+                if self.settings.limit is not None and self.settings.limit > 0:
+                    dataset_len = len(caption_dataset)
+                    # For captions, we need to limit based on unique image IDs
+                    # Flickr30k has ~5 captions per image, so multiply limit by 5
+                    caption_limit = self.settings.limit * 5
+                    caption_limit = min(caption_limit, dataset_len)
+                    logger.info(f"Applying caption limit: loading only first {caption_limit} of {dataset_len} captions")
+                    caption_dataset = caption_dataset.select(range(caption_limit))
+                
                 caption_ids, caption_vectors = extract_embeddings(
                     caption_dataset,
                     id_column=self.settings.caption_dataset.id_column,
@@ -699,6 +721,14 @@ class Flickr30kSearchEngine:
                 )
             elif metadata_needed:
                 caption_dataset = load_embedding_dataset(self.settings.caption_dataset)
+                
+                # Apply limit for metadata too (for faster debugging)
+                if self.settings.limit is not None and self.settings.limit > 0:
+                    dataset_len = len(caption_dataset)
+                    caption_limit = self.settings.limit * 5
+                    caption_limit = min(caption_limit, dataset_len)
+                    logger.info(f"Applying caption metadata limit: {caption_limit} of {dataset_len}")
+                    caption_dataset = caption_dataset.select(range(caption_limit))
 
             if metadata_needed:
                 notify(
@@ -1048,10 +1078,43 @@ class Flickr30kSearchEngine:
         }
 
 
+def _parse_cli_args() -> argparse.Namespace:
+    """
+    Parse command line arguments for the demo.
+    
+    Note: When running with streamlit, use: streamlit run script.py -- --limit 5
+    Or set via environment variable: FLICKR30K_LIMIT=5 streamlit run script.py
+    """
+    parser = argparse.ArgumentParser(description="Flickr30k Image Search Demo")
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Limit number of images to load (for faster debugging)",
+    )
+    # Parse only known args to avoid conflicts with streamlit's own args
+    args, _ = parser.parse_known_args()
+    
+    # Also check environment variable as an alternative
+    if args.limit is None:
+        env_limit = os.getenv("FLICKR30K_LIMIT")
+        if env_limit:
+            try:
+                args.limit = int(env_limit)
+            except ValueError:
+                logger.warning(f"Invalid FLICKR30K_LIMIT value: {env_limit}")
+    
+    return args
+
+
 def get_engine(settings: DemoSettings | None = None) -> Flickr30kSearchEngine:
     """Gets the search engine instance from the session state, creating it if needed."""
     if "engine" not in st.session_state:
-        st.session_state.engine = Flickr30kSearchEngine(settings or DemoSettings())
+        if settings is None:
+            # Parse CLI args when creating settings
+            args = _parse_cli_args()
+            settings = DemoSettings(limit=args.limit)
+        st.session_state.engine = Flickr30kSearchEngine(settings)
     return st.session_state.engine
 
 
@@ -1260,78 +1323,84 @@ def _render_results(
         return
 
     score_label = "Similarity" if backend.supports_similarity else "Score"
-    card_html_blocks: list[str] = []
-    for item in results:
-        identifier = html.escape(str(item.get("id", "")))
-        rank = int(item.get("rank", 0))
-        score_value = float(item.get("score", 0.0))
-        distance_value = float(item.get("distance", 0.0))
-        metric_value = html.escape(str(item.get("metric", "")).upper())
-        primary_caption = html.escape(item.get("caption") or "No description")
-        image_section: str
-        image_url = item.get("image_url")
-        if image_url:
-            image_section = (
-                f'<div class="result-card__image">'
-                f'<img src="{html.escape(str(image_url))}" alt="Image {identifier}" />'
-                "</div>"
-            )
-        else:
-            data_uri = _image_path_to_data_uri(str(item.get("image_path", "")))
-            if data_uri:
-                image_section = (
-                    f'<div class="result-card__image">'
-                    f'<img src="{data_uri}" alt="Image {identifier}" />'
-                    "</div>"
-                )
-            else:
-                image_section = (
-                    '<div class="result-card__image">'
-                    '<div class="result-card__placeholder">Preview unavailable</div>'
-                    "</div>"
-                )
-
-        extra_captions = item.get("captions", [])[1:]
-        if extra_captions:
-            extra_items = "".join(
-                f"<li>{html.escape(cap.get('caption') or '(No text)')}</li>"
-                for cap in extra_captions
-            )
-            more_html = f"""
-                <details class="result-card__more">
-                    <summary>More Captions</summary>
-                    <ul>{extra_items}</ul>
-                </details>
-            """
-        else:
-            more_html = ""
-
-        card_html_blocks.append(
-            f"""
-            <div class="result-card">
-                <div class="result-card__header">
-                    <div class="result-card__title">Image {identifier}</div>
-                    <span class="result-card__badge">#{rank}</span>
-                </div>
-                {image_section}
-                <div class="result-card__body">
-                    <div class="result-card__score">{score_label}: {score_value:.4f}</div>
-                    <p class="result-card__caption">{primary_caption}</p>
-                    <div class="result-card__meta">
-                        <span>Distance: {distance_value:.4f}</span>
-                        <span>Metric: {metric_value}</span>
-                    </div>
-                    {more_html}
-                </div>
-            </div>
-            """
-        )
-
-    result_html = '<div class="result-grid">' + "".join(card_html_blocks) + '</div>'
-    st.markdown(
-        result_html,
-        unsafe_allow_html=True,
-    )
+    
+    # Render results using native Streamlit components in a grid layout
+    # Use columns to create a responsive grid (3 cards per row)
+    CARDS_PER_ROW = 3
+    num_rows = (len(results) + CARDS_PER_ROW - 1) // CARDS_PER_ROW
+    
+    for row_idx in range(num_rows):
+        start_idx = row_idx * CARDS_PER_ROW
+        end_idx = min(start_idx + CARDS_PER_ROW, len(results))
+        row_results = results[start_idx:end_idx]
+        
+        # Create columns for this row
+        cols = st.columns(CARDS_PER_ROW)
+        
+        for col_idx, item in enumerate(row_results):
+            with cols[col_idx]:
+                # Create a container for each card with border
+                with st.container(border=True):
+                    identifier = str(item.get("id", ""))
+                    rank = int(item.get("rank", 0))
+                    score_value = float(item.get("score", 0.0))
+                    distance_value = float(item.get("distance", 0.0))
+                    metric_value = str(item.get("metric", "")).upper()
+                    primary_caption = item.get("caption") or "No description"
+                    
+                    # Header with rank badge
+                    st.markdown(
+                        f'<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">'
+                        f'<strong>Image {identifier}</strong>'
+                        f'<span style="background: var(--app-accent, #6366f1); color: white; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.875rem;">#{rank}</span>'
+                        f'</div>',
+                        unsafe_allow_html=True
+                    )
+                    
+                    # Display image - force full width
+                    image_url = item.get("image_url")
+                    image_path = item.get("image_path")
+                    
+                    # Determine image source
+                    image_to_display = None
+                    if image_url:
+                        image_to_display = image_url
+                    elif image_path:
+                        img_file = Path(image_path)
+                        if img_file.exists():
+                            image_to_display = str(img_file)
+                    
+                    if image_to_display:
+                        # Display image with full container width
+                        try:
+                            # Use the new parameter name
+                            st.image(image_to_display, use_container_width=True)
+                        except Exception as e:
+                            # If image fails to load, show error
+                            st.error(f"Failed to load image: {e}")
+                    else:
+                        st.warning("⚠️ Image not available")
+                    
+                    # Score
+                    st.metric(label=score_label, value=f"{score_value:.4f}")
+                    
+                    # Caption
+                    st.caption(primary_caption)
+                    
+                    # Distance and metric info
+                    st.markdown(
+                        f'<div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.5rem;">'
+                        f'Distance: {distance_value:.4f} · Metric: {metric_value}'
+                        f'</div>',
+                        unsafe_allow_html=True
+                    )
+                    
+                    # Extra captions in expander
+                    extra_captions = item.get("captions", [])[1:]
+                    if extra_captions:
+                        with st.expander("More Captions", expanded=False):
+                            for cap in extra_captions:
+                                st.caption(f"• {cap.get('caption') or '(No text)'}")
 
 
 def _create_progress_callback(
