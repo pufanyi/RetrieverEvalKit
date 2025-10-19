@@ -146,64 +146,6 @@ def _inject_app_styles() -> None:
             padding-top: 2rem;
         }
 
-        .stat-card {
-            background: var(--app-surface);
-            border: 1px solid var(--app-border);
-            border-radius: 18px;
-            padding: 1.25rem 1.5rem;
-            box-shadow: 0 20px 35px rgba(15, 23, 42, 0.35);
-            backdrop-filter: blur(12px);
-            min-height: 120px;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-        }
-
-        .stat-card__value {
-            font-size: 2rem;
-            font-weight: 700;
-            color: var(--app-text-strong);
-        }
-
-        .stat-card__label {
-            font-size: 0.9rem;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-            color: var(--app-text-muted);
-        }
-
-        .info-card {
-            background: var(--app-surface);
-            border: 1px solid var(--app-border);
-            border-radius: 20px;
-            padding: 1.5rem;
-            box-shadow: 0 22px 40px rgba(15, 23, 42, 0.3);
-            backdrop-filter: blur(12px);
-        }
-
-        .info-card h3 {
-            margin-top: 0;
-            margin-bottom: 0.75rem;
-            color: var(--app-text-strong);
-        }
-
-        .info-card ul {
-            padding-left: 1.25rem;
-            margin-bottom: 0;
-        }
-
-        .info-card li {
-            margin-bottom: 0.55rem;
-            color: rgba(226, 232, 240, 0.9);
-        }
-
-        .info-card code {
-            background: rgba(15, 23, 42, 0.55);
-            color: #c7d2fe;
-            padding: 0.1rem 0.35rem;
-            border-radius: 6px;
-        }
-
         .stButton > button {
             background: linear-gradient(135deg, #6366f1, #22d3ee);
             color: #0b1220;
@@ -291,27 +233,26 @@ def _inject_app_styles() -> None:
 
         .result-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-            gap: 1.5rem;
-            margin-top: 1.5rem;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 1rem;
+            margin-top: 1.25rem;
         }
 
         .result-card {
-            background: var(--app-surface);
-            border-radius: 20px;
-            border: 1px solid var(--app-border);
+            background: rgba(11, 18, 32, 0.82);
+            border-radius: 16px;
+            border: 1px solid rgba(99, 102, 241, 0.25);
             overflow: hidden;
-            box-shadow: 0 24px 42px rgba(15, 23, 42, 0.4);
+            box-shadow: 0 18px 30px rgba(15, 23, 42, 0.35);
             transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
             display: flex;
             flex-direction: column;
-            min-height: 100%;
         }
 
         .result-card:hover {
-            transform: translateY(-6px);
+            transform: translateY(-4px);
             border-color: var(--app-highlight);
-            box-shadow: 0 28px 48px rgba(99, 102, 241, 0.32);
+            box-shadow: 0 24px 40px rgba(99, 102, 241, 0.28);
         }
 
         .result-card__header {
@@ -343,16 +284,17 @@ def _inject_app_styles() -> None:
             color: var(--app-text-strong);
         }
 
-        .result-card__image img {
-            display: block;
-            width: 100%;
-            height: auto;
-            object-fit: cover;
-        }
-
         .result-card__image {
             position: relative;
             background: rgba(15, 23, 42, 0.55);
+            aspect-ratio: 4 / 3;
+        }
+
+        .result-card__image img {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
 
         .result-card__placeholder {
@@ -363,10 +305,10 @@ def _inject_app_styles() -> None:
         }
 
         .result-card__body {
-            padding: 1.2rem 1.25rem 1.4rem;
+            padding: 0.9rem 1rem 1.1rem;
             display: flex;
             flex-direction: column;
-            gap: 0.85rem;
+            gap: 0.65rem;
         }
 
         .result-card__score {
@@ -1126,16 +1068,9 @@ def _render_sidebar(
     caption_enabled: bool,
     text_enabled: bool,
 ) -> tuple[int, str]:
-    st.sidebar.header("Retrieval Settings")
+    st.sidebar.header("Search Options")
     if not status.get("ready"):
-        st.sidebar.info("Select a method tab and click Load to initialise an index.")
-    else:
-        loaded_methods = status.get("methods", [])
-        if loaded_methods:
-            summary = ", ".join(
-                method.get("label", method.get("id", "")) for method in loaded_methods
-            )
-            st.sidebar.caption(f"Loaded backends: {summary}")
+        st.sidebar.caption("Load a backend below before searching.")
 
     top_k = st.sidebar.slider(
         "Number of results",
@@ -1163,22 +1098,24 @@ def _render_sidebar(
         horizontal=True,
     )
 
-    if not text_enabled:
-        st.sidebar.caption("Text search disabled because the encoder is unavailable.")
-    if not caption_enabled:
-        st.sidebar.caption(
-            "Caption search disabled to avoid loading large caption embeddings."
+    with st.sidebar.expander("Engine details", expanded=False):
+        st.caption(
+            f"Images: {status.get('image_count', 0):,} · "
+            f"Captions: {status.get('caption_count', 0):,}"
         )
-
-    st.sidebar.markdown("---")
-    st.sidebar.caption(
-        f"📦 {status.get('image_count', 0):,} images · "
-        f"{status.get('caption_count', 0):,} captions"
-    )
-    if status.get("method_errors"):
-        with st.sidebar.expander("Disabled Retrieval Backends"):
+        if not text_enabled:
+            st.caption("Text search currently unavailable.")
+        if not caption_enabled:
+            st.caption("Caption search currently unavailable.")
+        loaded = status.get("methods", [])
+        if loaded:
+            labels = ", ".join(
+                item.get("label", item.get("id", "")) for item in loaded
+            )
+            st.caption(f"Loaded backends: {labels}")
+        if status.get("method_errors"):
             for key, message in status["method_errors"].items():
-                st.warning(f"{key}: {message}")
+                st.caption(f"{key}: {message}")
 
     return top_k, query_mode
 
@@ -1215,9 +1152,7 @@ def _execute_search(
         if not caption_id:
             raise ValueError("Please select or enter a caption ID")
         if not engine.status().get("caption_embeddings_loaded"):
-            raise ValueError(
-                "Caption search is disabled because caption embeddings remain unloaded."
-            )
+            raise ValueError("Caption search is currently unavailable.")
         vector, record = engine.caption_embedding(caption_id)
         summary = {
             "mode": "caption",
@@ -1392,8 +1327,9 @@ def _render_results(
             """
         )
 
+    result_html = '<div class="result-grid">' + "".join(card_html_blocks) + '</div>'
     st.markdown(
-        f'<div class="result-grid">{"".join(card_html_blocks)}</div>',
+        result_html,
         unsafe_allow_html=True,
     )
 
@@ -1424,6 +1360,7 @@ def main() -> None:
         page_icon="🔍",
         layout="wide",
     )
+    _inject_app_styles()
     st.title("🔍 Flickr30k Image Search")
     st.caption("Fast vector retrieval experience with Jina v4 encoder")
 
@@ -1432,14 +1369,50 @@ def main() -> None:
     engine = get_engine()
 
     if not engine.is_ready:
-        st.header("🚀 Initializing Demo")
+        dataset_spec = engine.settings.image_dataset
+        dataset_name = (
+            dataset_spec.dataset_name if dataset_spec else "Unknown dataset"
+        )
+        chips = [
+            f"Dataset · {dataset_name}",
+            f"Backends · {len(_DEFAULT_METHODS)} available",
+            "Encoder · Jina V4",
+        ]
+        chips_markup = "".join(
+            f'<span class="loading-hero__chip">{html.escape(item)}</span>'
+            for item in chips
+        )
         st.markdown(
-            "Preparing image and caption embeddings for the first time. "
-            "This might take a moment, but it's a one-off process."
+            f"""
+            <div class="loading-hero">
+                <div class="loading-hero__indicator">
+                    <span class="loading-hero__dot"></span>
+                    <span class="loading-hero__dot loading-hero__dot--delay-1"></span>
+                    <span class="loading-hero__dot loading-hero__dot--delay-2"></span>
+                </div>
+                <h2 class="loading-hero__title">Booting up the Flickr30k demo</h2>
+                <p class="loading-hero__subtitle">
+                    We are caching image embeddings and priming retrieval backends so your first search feels instant.
+                </p>
+                <div class="loading-hero__meta">
+                    {chips_markup}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
 
-        progress_placeholder = st.empty()
         status_placeholder = st.empty()
+        status_placeholder.markdown(
+            (
+                '<div class="loading-status">'
+                '<span class="loading-status__dot"></span>'
+                "Starting · 0.00s"
+                "</div>"
+            ),
+            unsafe_allow_html=True,
+        )
+        progress_placeholder = st.empty()
         progress_bar = progress_placeholder.progress(0.0, text="Starting...")
 
         # Use a queue to communicate between the prepare thread and the main thread
@@ -1482,7 +1455,8 @@ def main() -> None:
             try:
                 item_type, data = progress_queue.get(timeout=0.1)
                 if item_type == "progress":
-                    last_fraction, last_message = data
+                    last_fraction, raw_message = data
+                    last_message = str(raw_message)
                 elif item_type == "encoder":
                     last_message = "Loading text encoder model..."
                     last_fraction = 0.95  # Visually indicate we're near the end
@@ -1496,15 +1470,40 @@ def main() -> None:
                     break
                 elif item_type == "error":
                     final_message = str(data)
+                    last_message = final_message
                     break
             except queue.Empty:
                 pass  # No new message, just update the timer
 
             elapsed = time.perf_counter() - start_time
+            message_text = last_message or "Working..."
             progress_bar.progress(
-                last_fraction, text=f"{last_message} ({elapsed:.2f}s)"
+                last_fraction, text=f"{message_text} ({elapsed:.2f}s)"
             )
-            status_placeholder.caption(f"Elapsed: {elapsed:.2f}s")
+            status_placeholder.markdown(
+                (
+                    '<div class="loading-status">'
+                    '<span class="loading-status__dot"></span>'
+                    f"{html.escape(message_text)} · {elapsed:.2f}s"
+                    "</div>"
+                ),
+                unsafe_allow_html=True,
+            )
+
+        elapsed = time.perf_counter() - start_time
+        message_text = final_message or last_message or "Working..."
+        progress_bar.progress(
+            last_fraction, text=f"{message_text} ({elapsed:.2f}s)"
+        )
+        status_placeholder.markdown(
+            (
+                '<div class="loading-status">'
+                '<span class="loading-status__dot"></span>'
+                f"{html.escape(message_text)} · {elapsed:.2f}s"
+                "</div>"
+            ),
+            unsafe_allow_html=True,
+        )
 
         if encoder_failure:
             st.session_state["encoder_failure"] = encoder_failure
@@ -1532,76 +1531,18 @@ def main() -> None:
 
     status = engine.status()
 
-    stats_col1, stats_col2, stats_col3 = st.columns(3)
-    stats_col1.markdown(
-        f"""
-        <div class="stat-card">
-            <div class="stat-card__value">{status.get('image_count', 0):,}</div>
-            <div class="stat-card__label">Images Indexed</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    stats_col2.markdown(
-        f"""
-        <div class="stat-card">
-            <div class="stat-card__value">{status.get('caption_count', 0):,}</div>
-            <div class="stat-card__label">Captions Cached</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    stats_col3.markdown(
-        f"""
-        <div class="stat-card">
-            <div class="stat-card__value">{len(status.get('methods', []))}</div>
-            <div class="stat-card__label">Active Backends</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    overview_col1, overview_col2 = st.columns([2, 1])
     dataset_info = status.get("image_dataset") or {}
     caption_loaded = bool(status.get("caption_embeddings_loaded"))
-    with overview_col1:
-        caption_status = (
-            "ready" if caption_loaded else "disabled · caption embeddings stay unloaded"
-        )
-        st.markdown(
-            f"""
-            <div class="info-card">
-                <h3>Quick Start</h3>
-                <ul>
-                    <li><strong>Image embeddings</strong>: cached and ready for index builds.</li>
-                    <li><strong>Caption embeddings</strong>: {html.escape(caption_status)}.</li>
-                    <li><strong>Next step</strong>: pick a retrieval backend tab below and click <em>Load</em>.</li>
-                </ul>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with overview_col2:
+    with st.expander("Dataset details", expanded=False):
         image_root = status.get("image_root") or str(engine.settings.image_root)
-        st.markdown(
-            f"""
-            <div class="info-card">
-                <h3>Data Sources</h3>
-                <ul>
-                    <li>Dataset: <code>{html.escape(dataset_info.get('name', 'unknown') or 'unknown')}</code></li>
-                    <li>Config: <code>{html.escape(dataset_info.get('config', '-') or '-')}</code></li>
-                    <li>Split: <code>{html.escape(dataset_info.get('split', '-') or '-')}</code></li>
-                    <li>Images dir: <code>{html.escape(image_root or '-')}</code></li>
-                </ul>
-            </div>
-            """,
-            unsafe_allow_html=True,
+        st.caption(f"Dataset: {dataset_info.get('name', 'unknown') or 'unknown'}")
+        st.caption(
+            f"Config: {dataset_info.get('config', '-') or '-'} · "
+            f"Split: {dataset_info.get('split', '-') or '-'}"
         )
-    if not caption_loaded:
-        st.info(
-            "Caption search is disabled here to avoid loading the large caption "
-            "embedding matrix."
-        )
+        st.caption(f"Images dir: {image_root or '-'}")
+        caption_status = "ready" if caption_loaded else "disabled"
+        st.caption(f"Caption embeddings: {caption_status}")
 
     encoder_error = status.get("encoder_error")
     if encoder_error:
@@ -1701,9 +1642,11 @@ def main() -> None:
 
     timings_store = st.session_state.get("backend_timings", {}).get(method_id)
     if timings_store:
-        st.caption("Most recent load timings (seconds)")
-        timing_rows = {key: f"{value:.2f}s" for key, value in timings_store.items()}
-        st.write(timing_rows)
+        with st.expander("Load timings", expanded=False):
+            timing_rows = {
+                key: f"{value:.2f}s" for key, value in timings_store.items()
+            }
+            st.write(timing_rows)
 
     if not method_ready:
         st.info("Load the selected backend to start searching.")
