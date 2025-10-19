@@ -15,12 +15,6 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import torch
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-from img_search.embedding.siglip import SiglipEncoder
-
 DEFAULT_ANNOTATIONS = (
     "https://raw.githubusercontent.com/inquire-benchmark/INQUIRE/"
     "refs/heads/main/data/inquire/inquire_annotations.csv"
@@ -138,7 +132,10 @@ def parse_args() -> argparse.Namespace:
         "--hf-repo-id",
         type=str,
         default=None,
-        help="Target Hugging Face dataset repo (e.g. user/inquire-siglip-so400m-queries).",
+        help=(
+            "Target Hugging Face dataset repo (e.g."
+            " user/inquire-siglip-so400m-queries)."
+        ),
     )
     parser.add_argument(
         "--hf-token",
@@ -176,7 +173,7 @@ def _load_annotations(path: str | Path) -> dict[int, list[str]]:
         raise ValueError(f"Annotation columns missing: {', '.join(sorted(missing))}")
     grouped = (
         annotations.groupby("query_id")["image_path"]
-        .apply(lambda series: sorted(set(str(item) for item in series)))
+        .apply(lambda series: sorted({str(item) for item in series}))
         .to_dict()
     )
     return {int(query_id): paths for query_id, paths in grouped.items()}
@@ -332,6 +329,12 @@ def _write_shards(
 
 
 def main() -> None:
+    PROJECT_ROOT = Path(__file__).resolve().parents[2]
+    if str(PROJECT_ROOT) not in sys.path:
+        sys.path.insert(0, str(PROJECT_ROOT))
+
+    from img_search.embedding.siglip import SiglipEncoder
+
     args = parse_args()
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"

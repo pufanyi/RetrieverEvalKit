@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import html
 import os
 import queue
 import sys
@@ -9,6 +11,7 @@ import threading
 import time
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -97,6 +100,423 @@ _DEFAULT_METHODS: tuple[dict[str, Any], ...] = (
 _DEFAULT_METHOD_MAP: dict[str, dict[str, Any]] = {
     str(method["id"]): method for method in _DEFAULT_METHODS
 }
+
+
+def _inject_app_styles() -> None:
+    st.markdown(
+        """
+        <style>
+        :root {
+            --app-surface: rgba(15, 23, 42, 0.82);
+            --app-border: rgba(148, 163, 184, 0.18);
+            --app-highlight: rgba(99, 102, 241, 0.45);
+            --app-accent: #6366f1;
+            --app-accent-soft: rgba(99, 102, 241, 0.18);
+            --app-text-strong: #f8fafc;
+            --app-text-muted: #94a3b8;
+        }
+
+        .stApp {
+            background:
+                radial-gradient(120% 120% at 0% 0%, rgba(99, 102, 241, 0.18), transparent 60%),
+                radial-gradient(140% 140% at 100% 0%, rgba(56, 189, 248, 0.12), transparent 55%),
+                linear-gradient(135deg, #0b1220, #111b33 55%, #0b1220 90%);
+            color: var(--app-text-strong);
+        }
+
+        .stApp [data-testid="stHeader"] {
+            background: transparent;
+        }
+
+        .block-container {
+            padding: 2rem 4rem 4rem 4rem;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            color: var(--app-text-strong);
+        }
+
+        section[data-testid="stSidebar"] {
+            background: rgba(11, 18, 32, 0.85);
+            border-right: 1px solid rgba(148, 163, 184, 0.12);
+            backdrop-filter: blur(12px);
+        }
+
+        section[data-testid="stSidebar"] .stSidebarContent {
+            padding-top: 2rem;
+        }
+
+        .stat-card {
+            background: var(--app-surface);
+            border: 1px solid var(--app-border);
+            border-radius: 18px;
+            padding: 1.25rem 1.5rem;
+            box-shadow: 0 20px 35px rgba(15, 23, 42, 0.35);
+            backdrop-filter: blur(12px);
+            min-height: 120px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .stat-card__value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--app-text-strong);
+        }
+
+        .stat-card__label {
+            font-size: 0.9rem;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--app-text-muted);
+        }
+
+        .info-card {
+            background: var(--app-surface);
+            border: 1px solid var(--app-border);
+            border-radius: 20px;
+            padding: 1.5rem;
+            box-shadow: 0 22px 40px rgba(15, 23, 42, 0.3);
+            backdrop-filter: blur(12px);
+        }
+
+        .info-card h3 {
+            margin-top: 0;
+            margin-bottom: 0.75rem;
+            color: var(--app-text-strong);
+        }
+
+        .info-card ul {
+            padding-left: 1.25rem;
+            margin-bottom: 0;
+        }
+
+        .info-card li {
+            margin-bottom: 0.55rem;
+            color: rgba(226, 232, 240, 0.9);
+        }
+
+        .info-card code {
+            background: rgba(15, 23, 42, 0.55);
+            color: #c7d2fe;
+            padding: 0.1rem 0.35rem;
+            border-radius: 6px;
+        }
+
+        .stButton > button {
+            background: linear-gradient(135deg, #6366f1, #22d3ee);
+            color: #0b1220;
+            font-weight: 600;
+            border: none;
+            border-radius: 999px;
+            padding: 0.65rem 1.6rem;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .stButton > button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 24px rgba(34, 211, 238, 0.25);
+        }
+
+        .stButton > button:focus:not(:active) {
+            outline: 2px solid rgba(34, 211, 238, 0.35);
+        }
+
+        .stTextInput > div > div > input,
+        .stTextArea > div > textarea {
+            background: rgba(15, 23, 42, 0.65);
+            border-radius: 12px;
+            border: 1px solid rgba(148, 163, 184, 0.25);
+            color: var(--app-text-strong);
+        }
+
+        .stTextInput > div > div > input:focus,
+        .stTextArea > div > textarea:focus {
+            border-color: var(--app-highlight);
+            box-shadow: 0 0 0 1px var(--app-highlight);
+        }
+
+        [data-testid="stSelectbox"] div[role="combobox"],
+        [data-testid="stSelectbox"] input {
+            background: rgba(15, 23, 42, 0.65);
+            border-radius: 12px;
+            border: 1px solid rgba(148, 163, 184, 0.25);
+            color: var(--app-text-strong);
+        }
+
+        [data-testid="stForm"] {
+            background: rgba(15, 23, 42, 0.72);
+            border: 1px solid rgba(148, 163, 184, 0.22);
+            border-radius: 20px;
+            padding: 1.75rem;
+            box-shadow: 0 20px 35px rgba(15, 23, 42, 0.35);
+        }
+
+        .result-summary {
+            margin-top: 1.2rem;
+            padding: 1.5rem;
+            border-radius: 20px;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.22), rgba(59, 130, 246, 0.2));
+            border: 1px solid rgba(129, 140, 248, 0.38);
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+        }
+
+        .result-summary__meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.65rem;
+            font-size: 0.9rem;
+            color: rgba(226, 232, 240, 0.95);
+        }
+
+        .result-summary__chip {
+            padding: 0.35rem 0.8rem;
+            background: rgba(15, 23, 42, 0.55);
+            border-radius: 999px;
+            border: 1px solid rgba(129, 140, 248, 0.5);
+            color: #c7d2fe;
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .result-summary__query {
+            margin: 0;
+            font-size: 1.05rem;
+            color: var(--app-text-strong);
+        }
+
+        .result-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .result-card {
+            background: var(--app-surface);
+            border-radius: 20px;
+            border: 1px solid var(--app-border);
+            overflow: hidden;
+            box-shadow: 0 24px 42px rgba(15, 23, 42, 0.4);
+            transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            min-height: 100%;
+        }
+
+        .result-card:hover {
+            transform: translateY(-6px);
+            border-color: var(--app-highlight);
+            box-shadow: 0 28px 48px rgba(99, 102, 241, 0.32);
+        }
+
+        .result-card__header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 1.25rem 0.75rem;
+            color: rgba(226, 232, 240, 0.9);
+        }
+
+        .result-card__badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: 12px;
+            background: rgba(99, 102, 241, 0.32);
+            border: 1px solid rgba(99, 102, 241, 0.55);
+            font-weight: 600;
+            color: #ede9fe;
+            font-size: 1rem;
+            letter-spacing: 0.02em;
+        }
+
+        .result-card__title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--app-text-strong);
+        }
+
+        .result-card__image img {
+            display: block;
+            width: 100%;
+            height: auto;
+            object-fit: cover;
+        }
+
+        .result-card__image {
+            position: relative;
+            background: rgba(15, 23, 42, 0.55);
+        }
+
+        .result-card__placeholder {
+            padding: 3rem 1rem;
+            text-align: center;
+            color: var(--app-text-muted);
+            font-size: 0.95rem;
+        }
+
+        .result-card__body {
+            padding: 1.2rem 1.25rem 1.4rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.85rem;
+        }
+
+        .result-card__score {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            background: rgba(34, 211, 238, 0.12);
+            color: #67e8f9;
+            border: 1px solid rgba(34, 211, 238, 0.3);
+            border-radius: 999px;
+            padding: 0.35rem 0.9rem;
+            font-weight: 600;
+            font-size: 0.9rem;
+            width: fit-content;
+        }
+
+        .result-card__caption {
+            margin: 0;
+            color: rgba(226, 232, 240, 0.95);
+            font-size: 0.98rem;
+            line-height: 1.5;
+        }
+
+        .result-card__meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem 1.2rem;
+            font-size: 0.85rem;
+            color: var(--app-text-muted);
+        }
+
+        .result-card__more {
+            background: rgba(15, 23, 42, 0.6);
+            border-radius: 12px;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            padding: 0.75rem 1rem;
+        }
+
+        .result-card__more summary {
+            cursor: pointer;
+            color: #c7d2fe;
+            font-weight: 600;
+        }
+
+        .result-card__more ul {
+            padding-left: 1.15rem;
+            margin-top: 0.6rem;
+            color: rgba(226, 232, 240, 0.92);
+        }
+
+        .result-card__more li {
+            margin-bottom: 0.35rem;
+        }
+
+        .loading-hero {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(14, 165, 233, 0.2));
+            border-radius: 24px;
+            padding: 2.5rem;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            box-shadow: 0 30px 60px rgba(15, 23, 42, 0.55);
+            display: grid;
+            gap: 1.5rem;
+        }
+
+        .loading-hero__indicator {
+            display: inline-flex;
+            gap: 0.6rem;
+            align-items: center;
+        }
+
+        .loading-hero__dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 999px;
+            background: rgba(129, 140, 248, 0.85);
+            box-shadow: 0 0 0 0 rgba(129, 140, 248, 0.45);
+            animation: pulse 1.6s ease-in-out infinite;
+        }
+
+        .loading-hero__dot--delay-1 {
+            animation-delay: 0.2s;
+        }
+
+        .loading-hero__dot--delay-2 {
+            animation-delay: 0.4s;
+        }
+
+        .loading-hero__title {
+            font-size: 1.75rem;
+            margin: 0;
+            font-weight: 700;
+            color: var(--app-text-strong);
+        }
+
+        .loading-hero__subtitle {
+            margin: 0;
+            font-size: 1.05rem;
+            color: rgba(226, 232, 240, 0.92);
+            max-width: 60ch;
+        }
+
+        .loading-hero__meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+
+        .loading-hero__chip {
+            padding: 0.4rem 0.85rem;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.4);
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            font-size: 0.85rem;
+            color: rgba(226, 232, 240, 0.85);
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .loading-status {
+            margin-top: 0.9rem;
+            font-size: 0.9rem;
+            color: rgba(226, 232, 240, 0.85);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .loading-status__dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            background: rgba(129, 140, 248, 0.85);
+            animation: pulse 1.2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+                opacity: 0.6;
+            }
+            50% {
+                transform: scale(1.35);
+                opacity: 1;
+            }
+        }
+
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 @dataclass(slots=True)
@@ -812,6 +1232,28 @@ def _execute_search(
     return summary, backend_info, results
 
 
+@lru_cache(maxsize=128)
+def _image_path_to_data_uri(path: str) -> str | None:
+    image_path = Path(path)
+    if not path or not image_path.exists():
+        return None
+    try:
+        payload = image_path.read_bytes()
+    except OSError:
+        return None
+    suffix = image_path.suffix.lower()
+    if suffix in {".png"}:
+        mime = "image/png"
+    elif suffix in {".webp"}:
+        mime = "image/webp"
+    elif suffix in {".gif"}:
+        mime = "image/gif"
+    else:
+        mime = "image/jpeg"
+    encoded = base64.b64encode(payload).decode("ascii")
+    return f"data:{mime};base64,{encoded}"
+
+
 def _render_results(
     *,
     summary: Mapping[str, Any],
@@ -819,47 +1261,141 @@ def _render_results(
     results: list[dict[str, Any]],
 ) -> None:
     st.subheader("Search Results")
-    with st.expander("Query Information", expanded=True):
-        st.write(
-            {
-                "Mode": {"text": "Text", "image": "Image", "caption": "Caption"}[
-                    summary.get("mode", "text")
-                ],
-                "Backend": backend.label,
-                "Similarity Metric": backend.metric,
-            }
+
+    mode_map = {
+        "text": "Text Query",
+        "image": "Image Lookup",
+        "caption": "Caption Lookup",
+    }
+    mode = summary.get("mode", "text")
+    chips = [
+        mode_map.get(mode, "Search"),
+        backend.label,
+        backend.metric.upper(),
+        f"Top {len(results)}",
+    ]
+    if mode == "image" and summary.get("id"):
+        chips.append(f"Image ID {summary.get('id')}")
+    if mode == "caption" and summary.get("id"):
+        chips.append(f"Caption ID {summary.get('id')}")
+
+    chips_html = "".join(
+        f'<span class="result-summary__chip">{html.escape(str(value))}</span>'
+        for value in chips
+        if value
+    )
+
+    if mode == "text":
+        query_line = html.escape(summary.get("text", ""))
+        details_html = ""
+    elif mode == "image":
+        query_line = f"Image ID <code>{html.escape(summary.get('id', ''))}</code>"
+        preview = ""
+        captions = summary.get("captions") or []
+        if captions:
+            preview_caption = captions[0].get("caption") or "(No text)"
+            preview = f'<span class="result-summary__chip">Primary caption: {html.escape(preview_caption)}</span>'
+        details_html = (
+            f'<div class="result-summary__meta">{preview}</div>' if preview else ""
         )
-        if summary.get("mode") == "text":
-            st.markdown(f"**Query Text:** {summary.get('text', '')}")
-        elif summary.get("mode") == "image":
-            st.markdown(f"**Image ID:** {summary.get('id', '')}")
-        else:
-            caption_text = summary.get("caption") or "(No text)"
-            st.markdown(f"**Caption:** {caption_text}")
+    else:
+        caption_text = summary.get("caption") or "(No text)"
+        query_line = f"Caption <code>{html.escape(summary.get('id', ''))}</code>"
+        details_html = (
+            f'<div class="result-summary__meta">'
+            f'<span class="result-summary__chip">{html.escape(caption_text)}</span>'
+            f"</div>"
+        )
+
+    st.markdown(
+        f"""
+        <div class="result-summary">
+            <div class="result-summary__meta">
+                {chips_html}
+            </div>
+            <p class="result-summary__query">{query_line}</p>
+            {details_html}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     if not results:
         st.info("No matching results found.")
         return
 
-    columns = st.columns(3)
-    for index, item in enumerate(results):
-        column = columns[index % 3]
-        with column:
-            st.markdown(f"### #{item['rank']} · Image {item['id']}")
-            image_path = Path(item.get("image_path", ""))
-            if image_path.exists():
-                st.image(str(image_path), width="stretch")
-            st.caption(
-                f"Similarity: {item['score']:.4f} · "
-                f"Distance: {item['distance']:.4f} ({item['metric']})"
+    score_label = "Similarity" if backend.supports_similarity else "Score"
+    card_html_blocks: list[str] = []
+    for item in results:
+        identifier = html.escape(str(item.get("id", "")))
+        rank = int(item.get("rank", 0))
+        score_value = float(item.get("score", 0.0))
+        distance_value = float(item.get("distance", 0.0))
+        metric_value = html.escape(str(item.get("metric", "")).upper())
+        primary_caption = html.escape(item.get("caption") or "No description")
+        image_section: str
+        image_url = item.get("image_url")
+        if image_url:
+            image_section = (
+                f'<div class="result-card__image">'
+                f'<img src="{html.escape(str(image_url))}" alt="Image {identifier}" />'
+                "</div>"
             )
-            caption = item.get("caption") or "No description"
-            st.write(caption)
-            extra = item.get("captions", [])[1:]
-            if extra:
-                with st.expander("More Captions"):
-                    for cap in extra:
-                        st.markdown(f"- {cap.get('caption') or '(No text)'}")
+        else:
+            data_uri = _image_path_to_data_uri(str(item.get("image_path", "")))
+            if data_uri:
+                image_section = (
+                    f'<div class="result-card__image">'
+                    f'<img src="{data_uri}" alt="Image {identifier}" />'
+                    "</div>"
+                )
+            else:
+                image_section = (
+                    '<div class="result-card__image">'
+                    '<div class="result-card__placeholder">Preview unavailable</div>'
+                    "</div>"
+                )
+
+        extra_captions = item.get("captions", [])[1:]
+        if extra_captions:
+            extra_items = "".join(
+                f"<li>{html.escape(cap.get('caption') or '(No text)')}</li>"
+                for cap in extra_captions
+            )
+            more_html = f"""
+                <details class="result-card__more">
+                    <summary>More Captions</summary>
+                    <ul>{extra_items}</ul>
+                </details>
+            """
+        else:
+            more_html = ""
+
+        card_html_blocks.append(
+            f"""
+            <div class="result-card">
+                <div class="result-card__header">
+                    <div class="result-card__title">Image {identifier}</div>
+                    <span class="result-card__badge">#{rank}</span>
+                </div>
+                {image_section}
+                <div class="result-card__body">
+                    <div class="result-card__score">{score_label}: {score_value:.4f}</div>
+                    <p class="result-card__caption">{primary_caption}</p>
+                    <div class="result-card__meta">
+                        <span>Distance: {distance_value:.4f}</span>
+                        <span>Metric: {metric_value}</span>
+                    </div>
+                    {more_html}
+                </div>
+            </div>
+            """
+        )
+
+    st.markdown(
+        f'<div class="result-grid">{"".join(card_html_blocks)}</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def _create_progress_callback(
@@ -867,8 +1403,17 @@ def _create_progress_callback(
 ) -> Callable[[float, str, float], None]:
     def on_progress(fraction: float, message: str, elapsed: float) -> None:
         safe_value = max(0.0, min(1.0, fraction))
-        progress_bar.progress(safe_value, text=f"{message} ({elapsed:.2f}s)")
-        status_placeholder.caption(f"Elapsed: {elapsed:.2f}s")
+        message_text = str(message or "Working...")
+        progress_bar.progress(safe_value, text=f"{message_text} ({elapsed:.2f}s)")
+        status_placeholder.markdown(
+            (
+                '<div class="loading-status">'
+                '<span class="loading-status__dot"></span>'
+                f"{html.escape(message_text)} · {elapsed:.2f}s"
+                "</div>"
+            ),
+            unsafe_allow_html=True,
+        )
 
     return on_progress
 
@@ -988,9 +1533,33 @@ def main() -> None:
     status = engine.status()
 
     stats_col1, stats_col2, stats_col3 = st.columns(3)
-    stats_col1.metric("Image Count", f"{status.get('image_count', 0):,}")
-    stats_col2.metric("Caption Count", f"{status.get('caption_count', 0):,}")
-    stats_col3.metric("Loaded Backends", f"{len(status.get('methods', []))}")
+    stats_col1.markdown(
+        f"""
+        <div class="stat-card">
+            <div class="stat-card__value">{status.get('image_count', 0):,}</div>
+            <div class="stat-card__label">Images Indexed</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    stats_col2.markdown(
+        f"""
+        <div class="stat-card">
+            <div class="stat-card__value">{status.get('caption_count', 0):,}</div>
+            <div class="stat-card__label">Captions Cached</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    stats_col3.markdown(
+        f"""
+        <div class="stat-card">
+            <div class="stat-card__value">{len(status.get('methods', []))}</div>
+            <div class="stat-card__label">Active Backends</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     overview_col1, overview_col2 = st.columns([2, 1])
     dataset_info = status.get("image_dataset") or {}
@@ -1000,19 +1569,33 @@ def main() -> None:
             "ready" if caption_loaded else "disabled · caption embeddings stay unloaded"
         )
         st.markdown(
-            "## Quick Start\n"
-            "- **Image embeddings**: cached and ready for index builds.\n"
-            f"- **Caption embeddings**: {caption_status}.\n"
-            "- **Next step**: pick a retrieval backend tab below and click *Load*."
+            f"""
+            <div class="info-card">
+                <h3>Quick Start</h3>
+                <ul>
+                    <li><strong>Image embeddings</strong>: cached and ready for index builds.</li>
+                    <li><strong>Caption embeddings</strong>: {html.escape(caption_status)}.</li>
+                    <li><strong>Next step</strong>: pick a retrieval backend tab below and click <em>Load</em>.</li>
+                </ul>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
     with overview_col2:
         image_root = status.get("image_root") or str(engine.settings.image_root)
         st.markdown(
-            "## Data Sources\n"
-            f"- Dataset: `{dataset_info.get('name', 'unknown')}`\n"
-            f"- Config: `{dataset_info.get('config', '-')}`\n"
-            f"- Split: `{dataset_info.get('split', '-')}`\n"
-            f"- Images dir: `{image_root}`"
+            f"""
+            <div class="info-card">
+                <h3>Data Sources</h3>
+                <ul>
+                    <li>Dataset: <code>{html.escape(dataset_info.get('name', 'unknown') or 'unknown')}</code></li>
+                    <li>Config: <code>{html.escape(dataset_info.get('config', '-') or '-')}</code></li>
+                    <li>Split: <code>{html.escape(dataset_info.get('split', '-') or '-')}</code></li>
+                    <li>Images dir: <code>{html.escape(image_root or '-')}</code></li>
+                </ul>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
     if not caption_loaded:
         st.info(

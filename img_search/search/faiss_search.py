@@ -642,7 +642,7 @@ def _prepare_ground_truth_info(
 
 
 def _serialise_metadata_value(value: Any) -> Any:
-    if isinstance(value, (list, tuple, set)):
+    if isinstance(value, list | tuple | set):
         return ", ".join(str(item) for item in value)
     if isinstance(value, Mapping):
         return json.dumps(value, ensure_ascii=False)
