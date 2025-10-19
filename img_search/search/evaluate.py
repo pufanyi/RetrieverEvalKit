@@ -49,6 +49,7 @@ class BenchmarkSettings:
     recall_at: list[int] = field(default_factory=lambda: [1, 5])
     use_gpu: bool | None = None
     output_path: str | None = None
+    excel_output_path: str | None = None
 
 
 @dataclass(slots=True)
@@ -235,6 +236,9 @@ def run_search_evaluation(config: SearchEvalConfig) -> list[dict[str, Any]]:
         len(query_ids),
         query_dim,
     )
+    query_metadata = _collect_query_metadata(
+        query_dataset, config.query_dataset, len(query_ids)
+    )
 
     ground_truth: list[Sequence[str] | str] | None = None
     if config.query_dataset.relevance_column:
@@ -288,6 +292,7 @@ def run_search_evaluation(config: SearchEvalConfig) -> list[dict[str, Any]]:
         len(query_ids),
     )
 
+    detailed_rows: list[dict[str, Any]] = []
     progress_console = Console(stderr=True)
     with Progress(
         SpinnerColumn(),
@@ -301,7 +306,7 @@ def run_search_evaluation(config: SearchEvalConfig) -> list[dict[str, Any]]:
         disable=not progress_console.is_interactive,
     ) as progress:
         if method_configs:
-            results = benchmark_methods(
+            method_output = benchmark_methods(
                 image_vectors,
                 query_vectors,
                 ids=image_ids,
@@ -310,7 +315,16 @@ def run_search_evaluation(config: SearchEvalConfig) -> list[dict[str, Any]]:
                 ground_truth=ground_truth,
                 recall_points=config.evaluation.recall_at,
                 progress=progress,
+                collect_hits=True,
+                query_ids=query_ids,
+                query_metadata=query_metadata,
             )
+            if isinstance(method_output, tuple):
+                results, method_details = method_output
+            else:
+                results = method_output
+                method_details = []
+            detailed_rows.extend(method_details)
         else:
             results = []
     logger.info(
@@ -326,7 +340,7 @@ def run_search_evaluation(config: SearchEvalConfig) -> list[dict[str, Any]]:
         return str(cfg.get("metric", "l2")).lower()
 
     metrics = sorted({_metric_value(cfg) for cfg in method_configs})
-    brute_rows = benchmark_bruteforce(
+    brute_output = benchmark_bruteforce(
         image_vectors,
         query_vectors,
         ids=image_ids,
@@ -334,14 +348,27 @@ def run_search_evaluation(config: SearchEvalConfig) -> list[dict[str, Any]]:
         top_k=top_k,
         ground_truth=ground_truth,
         recall_points=config.evaluation.recall_at,
+        collect_hits=True,
+        query_ids=query_ids,
+        query_metadata=query_metadata,
     )
+    if isinstance(brute_output, tuple):
+        brute_rows, brute_details = brute_output
+    else:
+        brute_rows = brute_output
+        brute_details = []
     if brute_rows:
         logger.info("Appended {} brute-force baseline result(s)", len(brute_rows))
     results.extend(brute_rows)
+    detailed_rows.extend(brute_details)
 
     for row in results:
         row.setdefault("num_queries", len(query_ids))
         row.setdefault("top_k", top_k)
+
+    excel_path = _resolve_excel_path(config.evaluation)
+    if excel_path is not None:
+        _write_excel(results, detailed_rows, excel_path)
     return results
 
 
@@ -394,6 +421,151 @@ def _write_output(rows: list[dict[str, Any]], path: Path) -> None:
         writer.writeheader()
         for row in rows:
             writer.writerow(row)
+
+
+def _collect_query_metadata(
+    dataset: Any, spec: QueryDatasetSpec, total_rows: int
+) -> list[dict[str, Any]]:
+    if total_rows <= 0:
+        return []
+    column_names = getattr(dataset, "column_names", None)
+    if not column_names:
+        return [{} for _ in range(total_rows)]
+
+    exclude = {spec.id_column, spec.embedding_column}
+    if spec.relevance_column:
+        exclude.add(spec.relevance_column)
+
+    preferred = [
+        "query_id",
+        "query_text",
+        "split",
+        "supercategory",
+        "category",
+        "iconic_group",
+    ]
+    selected = [col for col in preferred if col in column_names and col not in exclude]
+    if not selected:
+        return [{} for _ in range(total_rows)]
+
+    try:
+        column_values = {col: dataset[col] for col in selected}
+    except Exception:  # pragma: no cover - fallback for streaming datasets
+        column_values = None
+
+    metadata: list[dict[str, Any]] = []
+    if column_values is not None:
+        for index in range(total_rows):
+            row = {}
+            for column in selected:
+                values = column_values[column]
+                try:
+                    row[column] = values[index]
+                except Exception:
+                    row[column] = None
+            metadata.append(row)
+        return metadata
+
+    for index in range(total_rows):  # pragma: no cover - fallback path
+        sample = dataset[index]
+        row = {column: sample.get(column) for column in selected}
+        metadata.append(row)
+    return metadata
+
+
+def _resolve_excel_path(settings: BenchmarkSettings) -> Path | None:
+    path_value = settings.excel_output_path
+    if path_value is not None:
+        if str(path_value).strip() == "":
+            return None
+        candidate = Path(path_value)
+    elif settings.output_path:
+        candidate = Path(settings.output_path).with_suffix(".xlsx")
+    else:
+        candidate = Path("outputs/search_eval/details.xlsx")
+
+    if not candidate.is_absolute():
+        candidate = Path(get_original_cwd()) / candidate
+    return candidate
+
+
+def _ordered_detail_columns(columns: Sequence[str]) -> list[str]:
+    preferred = [
+        "query_index",
+        "query_embedding_id",
+        "query_id",
+        "query_text",
+        "split",
+        "supercategory",
+        "category",
+        "iconic_group",
+        "backend",
+        "method",
+        "method_label",
+        "metric",
+        "use_gpu",
+        "top_k",
+        "rank",
+        "image_id",
+        "distance",
+        "is_relevant",
+        "relevant_ids",
+        "relevant_count",
+    ]
+    ordered = [column for column in preferred if column in columns]
+    remaining = [column for column in columns if column not in ordered]
+    return ordered + sorted(remaining)
+
+
+def _write_excel(
+    summary_rows: Sequence[Mapping[str, Any]],
+    detail_rows: Sequence[Mapping[str, Any]],
+    path: Path,
+) -> None:
+    try:
+        import pandas as pd
+    except ImportError as exc:  # pragma: no cover - pandas is a hard dependency in practice
+        logger.warning("Skipping Excel export; pandas is unavailable: {}", exc)
+        return
+
+    logger.info("Writing benchmark details workbook to {}", path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        writer_manager = pd.ExcelWriter(path)
+    except ModuleNotFoundError as exc:  # pragma: no cover - missing Excel backend
+        logger.warning(
+            "Skipping Excel export; no Excel writer backend available: {}", exc
+        )
+        return
+    except ValueError as exc:  # pragma: no cover - pandas could not construct writer
+        logger.warning("Skipping Excel export; unable to create writer: {}", exc)
+        return
+
+    with writer_manager as writer:
+        summary_df = pd.DataFrame(summary_rows)
+        if summary_df.empty:
+            summary_df = pd.DataFrame(columns=["backend", "method"])
+        summary_df.to_excel(writer, sheet_name="summary", index=False)
+
+        detail_df = pd.DataFrame(detail_rows)
+        if not detail_df.empty:
+            detail_df = detail_df[_ordered_detail_columns(detail_df.columns)]
+        else:  # ensure consistent headers when no results
+            detail_df = pd.DataFrame(
+                columns=_ordered_detail_columns(
+                    [
+                        "query_index",
+                        "query_embedding_id",
+                        "backend",
+                        "method",
+                        "metric",
+                        "rank",
+                        "image_id",
+                    ]
+                )
+            )
+        detail_df.to_excel(writer, sheet_name="details", index=False)
 
 
 def _parse_config(config: DictConfig) -> SearchEvalConfig:

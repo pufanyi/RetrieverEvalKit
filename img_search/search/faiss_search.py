@@ -10,6 +10,7 @@ scores are collected to make cross-backend comparisons straightforward.
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -298,7 +299,10 @@ def benchmark_methods(
     ground_truth: Sequence[Sequence[str] | str] | None = None,
     recall_points: Sequence[int] | None = None,
     progress: Progress | None = None,
-) -> list[dict[str, Any]]:
+    collect_hits: bool = False,
+    query_ids: Sequence[str] | None = None,
+    query_metadata: Sequence[Mapping[str, Any]] | None = None,
+) -> list[dict[str, Any]] | tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Benchmark multiple ANN configurations on shared data.
 
     When ``progress`` is provided, the function will update the task with
@@ -314,8 +318,28 @@ def benchmark_methods(
         raise ValueError("ids length must match embeddings length")
 
     results: list[dict[str, Any]] = []
+    detailed_rows: list[dict[str, Any]] = []
 
     recall_points = _normalise_recall_points(recall_points)
+    truth_info = _prepare_ground_truth_info(ground_truth) if collect_hits else None
+    if collect_hits:
+        if query_ids is not None and len(query_ids) != len(query_matrix):
+            raise ValueError("query_ids length must match number of queries")
+        if query_metadata is not None and len(query_metadata) != len(query_matrix):
+            raise ValueError("query_metadata length must match number of queries")
+        query_identifiers = (
+            [str(item) for item in query_ids]
+            if query_ids is not None
+            else [str(idx) for idx in range(len(query_matrix))]
+        )
+        metadata_rows: list[Mapping[str, Any]] = (
+            [dict(item) for item in query_metadata]
+            if query_metadata is not None
+            else [{} for _ in range(len(query_matrix))]
+        )
+    else:
+        query_identifiers = []
+        metadata_rows = []
 
     configs_list = list(method_configs)
     method_task: TaskID | None = None
@@ -417,6 +441,22 @@ def benchmark_methods(
             per_query_results, ground_truth, recall_points
         )
 
+        if collect_hits:
+            detailed_rows.extend(
+                _collect_detailed_rows(
+                    per_query_results=per_query_results,
+                    backend=backend,
+                    method=method_name,
+                    method_label=method_label,
+                    metric=str(metric),
+                    use_gpu=use_gpu,
+                    top_k=top_k,
+                    query_ids=query_identifiers,
+                    query_metadata=metadata_rows,
+                    ground_truth_info=truth_info,
+                )
+            )
+
         row: dict[str, Any] = {
             "backend": backend,
             "method": method_name,
@@ -443,6 +483,8 @@ def benchmark_methods(
         if progress is not None and method_task is not None:
             progress.advance(method_task)
 
+    if collect_hits:
+        return results, detailed_rows
     return results
 
 
@@ -455,7 +497,10 @@ def benchmark_bruteforce(
     top_k: int = 5,
     ground_truth: Sequence[Sequence[str] | str] | None = None,
     recall_points: Sequence[int] | None = None,
-) -> list[dict[str, Any]]:
+    collect_hits: bool = False,
+    query_ids: Sequence[str] | None = None,
+    query_metadata: Sequence[Mapping[str, Any]] | None = None,
+) -> list[dict[str, Any]] | tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Compute brute-force search baselines for the requested metrics."""
 
     embeddings_matrix = _as_matrix(embeddings)
@@ -468,6 +513,26 @@ def benchmark_bruteforce(
     recall_points = _normalise_recall_points(recall_points)
     metrics = list(dict.fromkeys(str(metric).lower() for metric in (metrics or ["l2"])))
     rows: list[dict[str, Any]] = []
+    detailed_rows: list[dict[str, Any]] = []
+    truth_info = _prepare_ground_truth_info(ground_truth) if collect_hits else None
+    if collect_hits:
+        if query_ids is not None and len(query_ids) != len(query_matrix):
+            raise ValueError("query_ids length must match number of queries")
+        if query_metadata is not None and len(query_metadata) != len(query_matrix):
+            raise ValueError("query_metadata length must match number of queries")
+        query_identifiers = (
+            [str(item) for item in query_ids]
+            if query_ids is not None
+            else [str(idx) for idx in range(len(query_matrix))]
+        )
+        metadata_rows: list[Mapping[str, Any]] = (
+            [dict(item) for item in query_metadata]
+            if query_metadata is not None
+            else [{} for _ in range(len(query_matrix))]
+        )
+    else:
+        query_identifiers = []
+        metadata_rows = []
 
     actual_k = min(int(top_k), embeddings_matrix.shape[0])
     if actual_k <= 0:
@@ -498,6 +563,21 @@ def benchmark_bruteforce(
             hits.append(row_hits)
 
         accuracy, recall_scores = _score_hits(hits, ground_truth, recall_points)
+        if collect_hits:
+            detailed_rows.extend(
+                _collect_detailed_rows(
+                    per_query_results=hits,
+                    backend="bruteforce",
+                    method="bruteforce",
+                    method_label=f"bruteforce/bruteforce ({metric})",
+                    metric=metric,
+                    use_gpu=False,
+                    top_k=top_k,
+                    query_ids=query_identifiers,
+                    query_metadata=metadata_rows,
+                    ground_truth_info=truth_info,
+                )
+            )
 
         row: dict[str, Any] = {
             "backend": "bruteforce",
@@ -514,16 +594,137 @@ def benchmark_bruteforce(
             row[f"recall@{point}"] = recall_scores.get(point)
         rows.append(row)
 
+    if collect_hits:
+        return rows, detailed_rows
     return rows
+
+
+def _normalise_label(value: str) -> str:
+    """Normalise identifiers so surface format mismatches (e.g. .jpg suffix) align."""
+
+    stripped = str(value).strip()
+    lowered = stripped.lower()
+    # Hugging Face datasets commonly store image IDs with extensions while
+    # embedding pipelines may drop them. Normalise known image suffixes so
+    # relevance lookups remain robust.
+    for suffix in (".jpg", ".jpeg", ".png", ".webp"):
+        if lowered.endswith(suffix):
+            return stripped[: -len(suffix)]
+    return stripped
 
 
 def _as_label_set(values: Sequence[str] | str | None) -> set[str]:
     if values is None:
         return set()
     if isinstance(values, str):
-        return {values}
-    result = {str(item) for item in values}
+        return {values.strip()}
+    result = {str(item).strip() for item in values}
     return result
+
+
+def _prepare_ground_truth_info(
+    ground_truth: Sequence[Sequence[str] | str] | None,
+) -> list[dict[str, Any]] | None:
+    if ground_truth is None:
+        return None
+    info: list[dict[str, Any]] = []
+    for value in ground_truth:
+        labels = _as_label_set(value)
+        normalised = {_normalise_label(item) for item in labels}
+        info.append(
+            {
+                "labels": labels,
+                "normalised": normalised,
+                "joined": "; ".join(sorted(labels)) if labels else None,
+            }
+        )
+    return info
+
+
+def _serialise_metadata_value(value: Any) -> Any:
+    if isinstance(value, (list, tuple, set)):
+        return ", ".join(str(item) for item in value)
+    if isinstance(value, Mapping):
+        return json.dumps(value, ensure_ascii=False)
+    return value
+
+
+def _collect_detailed_rows(
+    *,
+    per_query_results: Sequence[Sequence[Mapping[str, Any]]],
+    backend: str,
+    method: str,
+    method_label: str,
+    metric: str,
+    use_gpu: bool,
+    top_k: int,
+    query_ids: Sequence[str],
+    query_metadata: Sequence[Mapping[str, Any]],
+    ground_truth_info: Sequence[Mapping[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    total_queries = len(per_query_results)
+    if len(query_ids) != total_queries or len(query_metadata) != total_queries:
+        raise ValueError("Query metadata length mismatch during detail collection")
+    if ground_truth_info is not None and len(ground_truth_info) != total_queries:
+        raise ValueError("ground_truth length must match number of queries")
+
+    details: list[dict[str, Any]] = []
+    for index, retrieved in enumerate(per_query_results):
+        base_row: dict[str, Any] = {
+            "query_index": index,
+            "query_embedding_id": query_ids[index],
+            "backend": backend,
+            "method": method,
+            "method_label": method_label,
+            "metric": metric,
+            "use_gpu": use_gpu,
+            "top_k": top_k,
+        }
+        metadata = dict(query_metadata[index])
+        for key, value in metadata.items():
+            base_row[key] = _serialise_metadata_value(value)
+
+        truth = ground_truth_info[index] if ground_truth_info is not None else None
+        labels: set[str] = truth["labels"] if truth is not None else set()
+        normalised: set[str] = truth["normalised"] if truth is not None else set()
+        joined = truth["joined"] if truth is not None else None
+        relevant_count = len(labels) if truth is not None else None
+
+        if not retrieved:
+            row = dict(base_row)
+            row.update(
+                {
+                    "rank": None,
+                    "image_id": None,
+                    "distance": None,
+                    "is_relevant": None if truth is None else False,
+                    "relevant_ids": joined,
+                    "relevant_count": relevant_count,
+                }
+            )
+            details.append(row)
+            continue
+
+        for rank, hit in enumerate(retrieved, start=1):
+            row = dict(base_row)
+            hit_id = str(hit.get("id"))
+            distance = hit.get("distance")
+            relevant_flag = None
+            if truth is not None:
+                normalised_hit = _normalise_label(hit_id)
+                relevant_flag = hit_id in labels or normalised_hit in normalised
+            row.update(
+                {
+                    "rank": rank,
+                    "image_id": hit_id,
+                    "distance": float(distance) if distance is not None else None,
+                    "is_relevant": relevant_flag,
+                    "relevant_ids": joined,
+                    "relevant_count": relevant_count,
+                }
+            )
+            details.append(row)
+    return details
 
 
 def _normalise_recall_points(points: Sequence[int] | None) -> list[int]:
@@ -547,15 +748,21 @@ def _score_hits(
 
     for expected, retrieved in zip(ground_truth, per_query_results, strict=True):
         expected_ids = _as_label_set(expected)
-        if any(hit["id"] in expected_ids for hit in retrieved):
+        normalised_expected = {_normalise_label(value) for value in expected_ids}
+        if any(
+            (hit_id := str(hit["id"])) in expected_ids
+            or _normalise_label(hit_id) in normalised_expected
+            for hit in retrieved
+        ):
             correct += 1
-        if not recall_points or not expected_ids:
+        if not recall_points or not normalised_expected:
             continue
-        relevant_count = len(expected_ids)
-        retrieved_ids = [hit["id"] for hit in retrieved]
+        relevant_count = len(normalised_expected)
+        retrieved_ids = [str(hit["id"]).strip() for hit in retrieved]
+        normalised_retrieved = [_normalise_label(value) for value in retrieved_ids]
         for point in recall_points:
-            subset = retrieved_ids[: min(point, len(retrieved_ids))]
-            hits = len(expected_ids.intersection(subset))
+            subset = normalised_retrieved[: min(point, len(normalised_retrieved))]
+            hits = len(normalised_expected.intersection(subset))
             totals[point] += hits / relevant_count
             counts[point] += 1
 

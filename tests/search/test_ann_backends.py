@@ -1,6 +1,9 @@
 import numpy as np
 
-from img_search.search.faiss_search import benchmark_methods
+from img_search.search.faiss_search import (
+    benchmark_bruteforce,
+    benchmark_methods,
+)
 from img_search.search.hnswlib_search import HnswlibIndexConfig, HnswlibSearchIndex
 from img_search.search.scann_search import ScannIndexConfig, ScannSearchIndex
 
@@ -68,3 +71,49 @@ def test_benchmark_methods_supports_multiple_backends() -> None:
 
     backends = {row["backend"] for row in rows}
     assert {"faiss", "scann", "hnswlib"} <= backends
+
+
+def test_benchmark_methods_collects_hits_returns_details() -> None:
+    embeddings = np.eye(2, dtype="float32")
+    ids = [f"img-{i}" for i in range(2)]
+    ground_truth = [["img-0"], ["img-1"]]
+    query_ids = [f"q-{i}" for i in range(2)]
+    query_metadata = [{"query_text": "zero"}, {"query_text": "one"}]
+
+    rows, details = benchmark_methods(
+        embeddings,
+        embeddings,
+        ids=ids,
+        method_configs=[{"backend": "faiss", "method": "flat", "metric": "l2"}],
+        top_k=1,
+        ground_truth=ground_truth,
+        recall_points=[1],
+        collect_hits=True,
+        query_ids=query_ids,
+        query_metadata=query_metadata,
+    )
+
+    assert rows[0]["accuracy"] == 1.0
+    assert len(details) == 2
+    assert {detail["rank"] for detail in details} == {1}
+    assert {detail["query_text"] for detail in details} == {"zero", "one"}
+    assert all(detail["is_relevant"] for detail in details)
+
+
+def test_benchmark_bruteforce_handles_extension_mismatch() -> None:
+    embeddings = np.eye(2, dtype="float32")
+    ids = [f"img-{i}" for i in range(2)]
+    ground_truth = [["img-0.jpg"], ["img-1.JPG"]]
+
+    rows = benchmark_bruteforce(
+        embeddings,
+        embeddings,
+        ids=ids,
+        metrics=["l2"],
+        top_k=1,
+        ground_truth=ground_truth,
+        recall_points=[1],
+    )
+
+    assert rows[0]["accuracy"] == 1.0
+    assert rows[0]["recall@1"] == 1.0

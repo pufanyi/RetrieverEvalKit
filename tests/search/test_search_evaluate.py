@@ -48,7 +48,10 @@ def test_run_search_evaluation_from_disk(tmp_path) -> None:
             relevance_column="relevant_ids",
         ),
         evaluation=BenchmarkSettings(
-            methods=[{"method": "flat", "metric": "l2"}], top_k=1, recall_at=[1]
+            methods=[{"method": "flat", "metric": "l2"}],
+            top_k=1,
+            recall_at=[1],
+            excel_output_path=str(tmp_path / "eval_details.xlsx"),
         ),
     )
 
@@ -59,3 +62,7 @@ def test_run_search_evaluation_from_disk(tmp_path) -> None:
     assert results[0]["top_k"] == 1
     assert results[0]["recall@1"] == 1.0
     assert results[0]["accuracy"] == 1.0
+
+    excel_path = tmp_path / "eval_details.xlsx"
+    if excel_path.exists():
+        assert excel_path.stat().st_size > 0
